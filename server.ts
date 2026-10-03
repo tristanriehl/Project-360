@@ -27,6 +27,9 @@ const ai = new GoogleGenAI({
   },
 });
 
+// Ultra-lightweight, token-efficient model
+const GEMINI_LIGHT_MODEL = 'gemini-3.1-flash-lite';
+
 const createEmptyAnalysis = (name = 'Awaiting Folder Import'): ProjectAnalysis => ({
   projectId: 'AWAITING-DATASET',
   projectName: name,
@@ -111,11 +114,11 @@ app.post('/api/upload-dataset', async (req: Request, res: Response) => {
       });
     }
 
-    // Call Gemini 3.8 Flash (gemini-2.5-flash) to synthesize strictly from the uploaded folder
+    // Call Gemini Flash Lite (gemini-3.1-flash-lite) to synthesize with minimal token consumption
     const docsText = currentDocuments.map(d => `--- PIÈCE [${d.name}] (${d.categoryLabel} - Date: ${d.date}) ---
 Auteur: ${d.author || 'Inconnu'}
 Contenu:
-${d.content.slice(0, 3500)}`).join('\n\n');
+${d.content.slice(0, 1800)}`).join('\n\n');
 
     const prompt = `Tu es l'analyste principal du système 'Projet 360 - Cerveau du Projet'.
 L'utilisateur vient d'importer son dossier de projet contenant ${currentDocuments.length} pièces documentaires réelles :
@@ -137,7 +140,7 @@ Produis une réponse JSON structurée :
 10. topics : Thématiques principales`;
 
     const response = await ai.models.generateContent({
-      model: 'gemini-2.5-flash',
+      model: GEMINI_LIGHT_MODEL,
       contents: prompt,
       config: {
         responseMimeType: 'application/json',
@@ -186,7 +189,7 @@ app.post('/api/analyze-project', async (req: Request, res: Response) => {
     const docsText = docsToAnalyze.map(d => `--- DOCUMENT [${d.name}] (${d.categoryLabel} - Date: ${d.date}) ---
 Auteur: ${d.author || 'Inconnu'}
 Contenu:
-${d.content}`).join('\n\n');
+${d.content.slice(0, 1800)}`).join('\n\n');
 
     const prompt = `Tu es l'analyste principal et moteur RAG du système 'Projet 360 - Le Cerveau du Projet'.
 Ta mission est d'analyser l'ensemble des documents d'un projet d'entreprise (courriels, comptes-rendus de réunions, tickets de bugs, contrats, finances, enregistrements d'architecture ADR, conversations Teams, notes de passation) pour construire une mémoire opérationnelle fiable et structurée.
@@ -207,7 +210,7 @@ Fournis une analyse JSON rigoureuse et exhaustive respectant scrupuleusement la 
 10. Catégorise les thématiques principales (topics) avec leur état de santé.`;
 
     const response = await ai.models.generateContent({
-      model: 'gemini-3.8-flash',
+      model: GEMINI_LIGHT_MODEL,
       contents: prompt,
       config: {
         responseMimeType: 'application/json',
@@ -457,7 +460,7 @@ Réponds au format JSON avec le schéma suivant :
 - suggestedFollowUps: 3 questions pertinentes que l'utilisateur pourrait poser ensuite.`;
 
     const response = await ai.models.generateContent({
-      model: 'gemini-3.8-flash',
+      model: GEMINI_LIGHT_MODEL,
       contents: userPrompt,
       config: {
         systemInstruction: systemPrompt,
@@ -576,7 +579,7 @@ Tu dois répondre formellement aux 3 questions imposées par le Défi 360 :
 Fournis également l'impact sur le statut global du projet ('on_track', 'at_risk', 'delayed') et une mise à jour des éléments clés.`;
 
     const response = await ai.models.generateContent({
-      model: 'gemini-3.8-flash',
+      model: GEMINI_LIGHT_MODEL,
       contents: prompt,
       config: {
         responseMimeType: 'application/json',
@@ -688,7 +691,7 @@ Produis un compte-rendu synthétique, orienté décision et gouvernance, incluan
 - Arbitrages demandés à la direction`;
 
     const response = await ai.models.generateContent({
-      model: 'gemini-3.8-flash',
+      model: GEMINI_LIGHT_MODEL,
       contents: prompt,
       config: {
         systemInstruction: "Tu es un directeur de programme et conseiller exécutif chevronné.",

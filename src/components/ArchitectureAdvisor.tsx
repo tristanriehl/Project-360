@@ -39,10 +39,10 @@ export const ArchitectureAdvisor: React.FC = () => {
                 </div>
                 <div>
                   <h3 className="text-base font-black text-slate-900 dark:text-white">
-                    Frontier Model API (Gemini 3.8 Flash)
+                    Gemini Flash Lite (gemini-3.1-flash-lite)
                   </h3>
                   <p className="text-xs text-blue-600 dark:text-blue-400 font-semibold">
-                    Recommandé pour RAG Complexe &amp; Défi 360
+                    Ultra-rapide, léger &amp; économe en tokens
                   </p>
                 </div>
               </div>
