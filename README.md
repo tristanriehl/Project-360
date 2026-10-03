@@ -1,60 +1,98 @@
-# Projet 360 — Cerveau Opérationnel & Dashboard RAG
+# Projet 360 — Operational Memory & RAG Project Cockpit
 
-> Système de mémoire opérationnelle fiable et tableau de bord 360° pour le pilotage de projet, la détection de contradictions et l'analyse d'impact d'événements imprévus.
+> Real-time operational project memory, automated discrepancy & contradiction detection, natural language RAG with strict document citations, and dynamic new event impact analysis.
 
 ---
 
-## 🚀 Démarrage Rapide en Local sur votre Ordinateur
+## 🚀 How to Run Locally on Your Computer / Démarrage Local
 
-Ce projet est une application web complète fonctionnant avec **Node.js, Express, React 19, TypeScript et Tailwind CSS**.
+This application is built with **Node.js, Express, React 19, TypeScript, and Tailwind CSS v4**.
 
-### 1. Prérequis
-- Node.js (version 18 ou supérieure)
-- npm, yarn ou bun
+### 📋 Prerequisites / Prérequis
+- **Node.js**: `v18.0.0` or higher (`v20+` or `v22+` recommended)
+- **Package manager**: `npm` (included with Node.js), `yarn`, `pnpm`, or `bun`
 
-### 2. Installation
+---
+
+### 💻 Step-by-Step Installation & Run / Instructions Pas-à-Pas
+
+#### 1. Clone or Extract the Project
+Open your terminal (macOS/Linux) or PowerShell / Command Prompt (Windows):
+
 ```bash
-git clone <votre-dépôt> projet-360
+git clone <your-repository-url> projet-360
 cd projet-360
+```
+
+#### 2. Install Dependencies
+Run the standard package manager installation:
+
+```bash
 npm install
 ```
 
-### 3. Configuration des Modes d'Exécution (Optionnel)
-Créez un fichier `.env` à la racine :
+#### 3. Environment Variables Configuration (Optional / Optionnel)
+Copy the example environment file:
 
+```bash
+cp .env.example .env
+```
+
+Edit `.env` with your preferred text editor:
 ```env
-# Optionnel : Si vous souhaitez utiliser l'API Gemini
-GEMINI_API_KEY="votre_clé_api"
+# Optional: Set your Gemini API key for live generative synthesis
+# The app uses the ultra-fast and token-efficient gemini-3.1-flash-lite model
+GEMINI_API_KEY="your_gemini_api_key_here"
 
-# Optionnel : Si vous souhaitez connecter un LLM local Ollama
-OLLAMA_HOST="http://localhost:11434"
-OLLAMA_MODEL="llama3.2"
-
-# Port d'écoute du serveur
+# Optional: Custom port (defaults to 3000)
 PORT=3000
 ```
 
-*Note : Même sans clé API configurée, l'application intègre un **mode démo local 100% autonome et hors-ligne** qui permet d'exécuter toutes les fonctionnalités (croisement des 35 documents, détection des contradictions, graphe de connaissances, réponses RAG sourcées et simulation de nouveaux événements).*
+> **Note**: Even without a `GEMINI_API_KEY`, the application includes an **offline local parser & heuristic RAG engine** so that you can test and demonstrate all features (decisions extraction, contradiction spotting, timeline generation, interactive graph, and briefing) directly on your machine.
 
-### 4. Lancement
+#### 4. Start the Local Server
 ```bash
 npm run dev
 ```
 
-Ouvrez votre navigateur sur : **[http://localhost:3000](http://localhost:3000)**
+#### 5. Open Your Browser
+Navigate to:
+👉 **[http://localhost:3000](http://localhost:3000)**
 
 ---
 
-## 🎯 Architecture & Fonctionnalités Clés (Défi 24h)
+### 📁 Ingesting Your Project Dataset
 
-1. **Tableau de Bord Exécutif 360° :** Jauge de santé, statut consolidé, 5 décisions actées, échéances à 30 jours, 2 risques sous surveillance, 4 prochaines actions prioritaires.
-2. **Cerveau & Graphe de Connaissances :** Vue interactive en réseau reliant les documents sources, décisions, risques et thématiques.
-3. **Assistant RAG & Citations Directes :** Moteur de questions-réponses en langage naturel avec vérification des preuves et extraits textuels authentifiés.
-4. **Module « Un nouvel événement survient » :** Analyse instantanée en 3 questions :
-   - *Qu'est-ce qui vient de changer ?*
-   - *Quelles informations précédentes sont maintenant affectées ?*
-   - *Quelles actions devraient être prises ?*
-5. **Détecteur de Contradictions :** Distinction nette entre informations historiques périmées et vérité terrain actuellement valide (ex: date du 30 oct. vs 28 nov., facturation du CR-04 non signé sur INV-003).
-6. **Registre des Décisions & Preuves Auditables :** Traçabilité exhaustive des justifications avec liens directs vers les documents sources.
-7. **Gestionnaire de Documents Multi-Formats :** Ingestion glisser-déposer de courriels (.eml), comptes-rendus (.txt), contrats (.pdf), feuilles de calcul (.xlsx), tickets et messages Teams.
-8. **Briefing Exécutif & Comparaison Multi-Projets :** Synthèse prête pour la direction générale et comparaison avec un projet logistique de référence (Projet ORION).
+1. On the home screen, click **"Select Folder from Disk"** (or drag and drop your project directory).
+2. The folder parser automatically ingests:
+   - ✉️ **Emails (`.eml`)**: Parses headers (`From:`, `To:`, `Date:`, `Subject:`) and body text.
+   - 📝 **Documents & Notes (`.txt`, `.md`, `.json`, `.csv`, `.log`)**: Full text extraction.
+   - 📊 **Spreadsheets & PDFs (`.xlsx`, `.pdf`, `.docx`)**: Structured data and readable text.
+3. The RAG cockpit immediately extracts verified decisions, contradictions, delivery milestones, and active risks strictly from your uploaded files.
+
+---
+
+### 🛠️ Available NPM Scripts
+
+| Command | Description |
+| :--- | :--- |
+| `npm run dev` | Starts Express server with Vite middleware on `http://localhost:3000` |
+| `npm run build` | Compiles frontend assets with TypeScript & Vite into `dist/` |
+| `npm start` | Runs the production fullstack server (`NODE_ENV=production`) |
+| `npm run lint` | Checks TypeScript compilation without emitting files (`tsc --noEmit`) |
+
+---
+
+### ❓ Troubleshooting / Dépannage
+
+- **Port 3000 already in use?**
+  Change the port in `.env` (e.g. `PORT=3001`) or run:
+  ```bash
+  PORT=3001 npm run dev
+  ```
+- **Windows PowerShell script execution policy?**
+  If `tsx` or `npm` fails due to execution policy, run:
+  ```powershell
+  Set-ExecutionPolicy -Scope Process -ExecutionPolicy Bypass
+  npm run dev
+  ```
