@@ -954,3 +954,30 @@ Aucun litige enregistré.`,
     relevanceStatus: 'valid'
   }
 ];
+
+export const EMPTY_PROJECT_ANALYSIS: ProjectAnalysis = {
+  projectId: 'AWAITING-DATASET',
+  projectName: 'En attente d\'un dossier',
+  status: 'on_track',
+  statusLabel: 'En attente',
+  healthScore: 0,
+  lastUpdated: new Date().toISOString().split('T')[0],
+  executiveSummary: 'Aucun fichier chargé en mémoire. Veuillez importer votre dossier de projet pour que le moteur RAG génère les analyses et citations.',
+  keyStakeholders: [],
+  milestones: [],
+  decisions: [],
+  risks: [],
+  actions: [],
+  contradictions: [],
+  financials: {
+    contractTotal: 'Non renseigné',
+    invoicedTotal: 'Non renseigné',
+    paidTotal: 'Non renseigné',
+    disputedAmount: '0 $',
+    notes: 'En attente d\'importation des pièces financières'
+  },
+  topics: [],
+  activeBlockersCount: 0,
+  decisionsCount: 0,
+  upcomingDeadlinesCount: 0
+};

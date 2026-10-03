@@ -15,6 +15,7 @@ import {
   Check
 } from 'lucide-react';
 import { ChatMessage, ProjectDocument } from '../types/project';
+import { useLanguage } from '../context/LanguageContext';
 
 interface RagChatProps {
   documents: ProjectDocument[];
@@ -27,26 +28,38 @@ export const RagChat: React.FC<RagChatProps> = ({
   onSelectDocument,
   initialQuery
 }) => {
-  const [messages, setMessages] = useState<ChatMessage[]>([
-    {
-      id: 'welcome',
-      role: 'assistant',
-      content: `Mémoire opérationnelle indexée sur 35+ documents (courriels, comptes-rendus, contrats, JIRA). Posez vos questions sur les dates, décisions, risques ou contradictions.`,
-      timestamp: new Date().toLocaleTimeString('fr-CA', { hour: '2-digit', minute: '2-digit' }),
-      citations: [
-        {
-          docName: 'Plan_Projet_NOVA_v3_12sept.xlsx',
-          quote: 'Mise en Production Officielle (Go-Live) : 28 Novembre 2026',
-          relevance: 'Jalon officiel consolidé'
-        }
-      ],
-      suggestedFollowUps: [
-        "Quelle est la date de livraison actuellement prévue et pourquoi ?",
-        "Quelles décisions ont été prises concernant le fournisseur ?",
-        "Existe-t-il des informations contradictoires ?"
-      ]
-    }
-  ]);
+  const { language } = useLanguage();
+  const isEn = language === 'en';
+
+  const [messages, setMessages] = useState<ChatMessage[]>(() => {
+    const firstDoc = documents[0];
+    return [
+      {
+        id: 'welcome',
+        role: 'assistant',
+        content: isEn 
+          ? `Operational RAG memory indexed strictly across your ${documents.length} uploaded documents. Ask any questions about decisions, delivery dates, risks or discrepancies.`
+          : `Mémoire opérationnelle indexée strictement sur vos ${documents.length} pièces documentaires réelles. Posez vos questions sur les dates, décisions, risques ou contradictions.`,
+        timestamp: new Date().toLocaleTimeString('fr-CA', { hour: '2-digit', minute: '2-digit' }),
+        citations: firstDoc ? [
+          {
+            docName: firstDoc.name,
+            quote: firstDoc.summary,
+            relevance: isEn ? 'Indexed from your folder' : 'Extrait de votre dossier'
+          }
+        ] : [],
+        suggestedFollowUps: isEn ? [
+          "What is the official delivery date according to the documents?",
+          "What decisions were approved regarding vendors?",
+          "Are there any conflicting statements or contradictions?"
+        ] : [
+          "Quelle est la date de livraison actuellement prévue et pourquoi ?",
+          "Quelles décisions ont été prises concernant le fournisseur ?",
+          "Existe-t-il des informations contradictoires ?"
+        ]
+      }
+    ];
+  });
   
   const [input, setInput] = useState('');
   const [isLoading, setIsLoading] = useState(false);

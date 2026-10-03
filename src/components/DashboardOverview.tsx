@@ -38,7 +38,7 @@ export const DashboardOverview: React.FC<DashboardOverviewProps> = ({
           <div className="flex items-center gap-2.5 text-xs text-amber-900 dark:text-amber-200">
             <AlertTriangle className="w-4 h-4 text-amber-600 shrink-0" />
             <span>
-              <strong>{analysis.contradictions.length} divergences identifiées :</strong> dates de livraison &amp; facture CR-04
+              <strong>{analysis.contradictions.length} divergence{analysis.contradictions.length > 1 ? 's' : ''} identifiée{analysis.contradictions.length > 1 ? 's' : ''} :</strong> {analysis.contradictions[0]?.topic || analysis.contradictions[0]?.issue || 'Arbitrage documentaire requis'}
             </span>
           </div>
           <button

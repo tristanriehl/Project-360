@@ -10,48 +10,54 @@ import { ExecutiveBriefing } from './components/ExecutiveBriefing';
 import { DocumentViewerModal } from './components/DocumentViewerModal';
 import { LocalDemoModal } from './components/LocalDemoModal';
 import { MorePage } from './components/MorePage';
-import { INITIAL_NOVA_ANALYSIS, SAMPLE_DOCUMENTS_NOVA } from './data/sampleProjects';
+import { DatasetImportScreen } from './components/DatasetImportScreen';
+import { EMPTY_PROJECT_ANALYSIS } from './data/sampleProjects';
 import { ProjectAnalysis, ProjectDocument } from './types/project';
+import { FolderUp, Trash2, CheckCircle2 } from 'lucide-react';
+import { useLanguage } from './context/LanguageContext';
 
 export default function App() {
+  const { language } = useLanguage();
   const [activeTab, setActiveTab] = useState<TabType>('overview');
-  const [analysis, setAnalysis] = useState<ProjectAnalysis>(INITIAL_NOVA_ANALYSIS);
-  const [documents, setDocuments] = useState<ProjectDocument[]>(SAMPLE_DOCUMENTS_NOVA);
+  const [analysis, setAnalysis] = useState<ProjectAnalysis>(EMPTY_PROJECT_ANALYSIS);
+  const [documents, setDocuments] = useState<ProjectDocument[]>([]);
   const [selectedDocument, setSelectedDocument] = useState<ProjectDocument | null>(null);
   const [isAnalyzing, setIsAnalyzing] = useState(false);
   const [initialChatQuery, setInitialChatQuery] = useState<string | undefined>(undefined);
   const [isLocalGuideOpen, setIsLocalGuideOpen] = useState(false);
+  const [isFolderModalOpen, setIsFolderModalOpen] = useState(false);
+
+  const isEn = language === 'en';
 
   // Fetch current state from backend on mount
   useEffect(() => {
     fetch('/api/project')
       .then(res => res.json())
       .then(data => {
-        if (data.project) setAnalysis(data.project);
-        if (data.documents) setDocuments(data.documents);
+        if (data.documents && data.documents.length > 0) {
+          setDocuments(data.documents);
+          if (data.project) setAnalysis(data.project);
+        }
       })
       .catch(err => {
-        console.warn('Backend /api/project non accessible, chargement données locales:', err);
+        console.warn('Backend /api/project initial check:', err);
       });
   }, []);
 
   const handleResetProject = async () => {
-    if (!window.confirm('Voulez-vous réinitialiser toutes les données au cas officiel NOVA ?')) return;
+    if (!window.confirm(isEn ? 'Clear all documents and import a new folder?' : 'Voulez-vous vider tous les documents et importer un nouveau dossier ?')) return;
 
     try {
-      const res = await fetch('/api/reset-project', { method: 'POST' });
-      const data = await res.json();
-      if (data.project) setAnalysis(data.project);
-      if (data.documents) setDocuments(data.documents);
-      setActiveTab('overview');
-    } catch (err) {
-      setAnalysis(INITIAL_NOVA_ANALYSIS);
-      setDocuments(SAMPLE_DOCUMENTS_NOVA);
-      setActiveTab('overview');
-    }
+      await fetch('/api/clear-dataset', { method: 'POST' });
+    } catch (err) {}
+    
+    setAnalysis(EMPTY_PROJECT_ANALYSIS);
+    setDocuments([]);
+    setActiveTab('overview');
   };
 
   const handleRefreshAnalysis = async () => {
+    if (documents.length === 0) return;
     setIsAnalyzing(true);
     try {
       const res = await fetch('/api/analyze-project', {
@@ -63,31 +69,31 @@ export default function App() {
       if (data.analysis) {
         setAnalysis(data.analysis);
       }
-    } catch (err: any) {
-      alert(`Erreur lors de la réanalyse : ${err.message}`);
+    } catch (err) {
+      console.warn('Erreur lors du rafraîchissement:', err);
     } finally {
       setIsAnalyzing(false);
     }
   };
 
-  const handleQuickAsk = (question: string) => {
-    setInitialChatQuery(question);
-    setActiveTab('chat');
-  };
-
-  const handleEventApplied = (updatedProject: ProjectAnalysis, newDoc: ProjectDocument) => {
-    setAnalysis(updatedProject);
+  const handleEventApplied = (updatedAnalysis: ProjectAnalysis, newDoc: ProjectDocument) => {
     setDocuments(prev => [newDoc, ...prev]);
+    setAnalysis(updatedAnalysis);
   };
 
   const handleDocumentsAdded = (newDocs: ProjectDocument[]) => {
     setDocuments(prev => [...newDocs, ...prev]);
-    // Automatically trigger fresh analysis
-    handleRefreshAnalysis();
+  };
+
+  const handleDatasetLoaded = (newDocs: ProjectDocument[], newAnalysis: ProjectAnalysis) => {
+    setDocuments(newDocs);
+    setAnalysis(newAnalysis);
+    setIsFolderModalOpen(false);
+    setActiveTab('overview');
   };
 
   return (
-    <div className="min-h-screen bg-slate-100/70 dark:bg-slate-950 text-slate-900 dark:text-slate-100 antialiased font-sans flex flex-row">
+    <div className="flex h-screen bg-slate-50 dark:bg-slate-950 text-slate-900 dark:text-slate-100 font-sans antialiased overflow-hidden">
       {/* Collapsible Side Navigation Bar */}
       <Sidebar
         activeTab={activeTab}
@@ -103,71 +109,119 @@ export default function App() {
       />
 
       {/* Main Content Viewport */}
-      <main className="flex-1 min-w-0 p-5 sm:p-7 max-w-7xl mx-auto overflow-y-auto">
-        {activeTab === 'overview' && (
-          <DashboardOverview
-            analysis={analysis}
-            documents={documents}
-            onSelectDocument={setSelectedDocument}
-            onNavigateTab={setActiveTab}
-          />
-        )}
+      <main className="flex-1 min-w-0 p-4 sm:p-6 max-w-7xl mx-auto overflow-y-auto flex flex-col">
+        
+        {/* If no documents are loaded yet, display the Dataset Folder Import Screen */}
+        {documents.length === 0 ? (
+          <div className="flex-1 flex items-center justify-center">
+            <DatasetImportScreen onDatasetLoaded={handleDatasetLoaded} />
+          </div>
+        ) : (
+          <div className="space-y-4 flex-1">
+            {/* Top Operational Status Bar */}
+            <div className="flex flex-wrap items-center justify-between gap-3 px-4 py-2.5 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-xs">
+              <div className="flex items-center gap-3">
+                <span className="flex h-2.5 w-2.5 relative">
+                  <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
+                  <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-emerald-500"></span>
+                </span>
+                <div>
+                  <span className="text-xs font-bold text-slate-900 dark:text-white">
+                    {analysis.projectName || (isEn ? 'Imported Project' : 'Projet Importé')}
+                  </span>
+                  <span className="text-[11px] text-slate-500 ml-2 font-mono">
+                    ({documents.length} {isEn ? 'real documents in RAG memory' : 'pièces réelles en mémoire RAG'})
+                  </span>
+                </div>
+              </div>
 
-        {activeTab === 'chat' && (
-          <RagChat
-            documents={documents}
-            onSelectDocument={setSelectedDocument}
-            initialQuery={initialChatQuery}
-          />
-        )}
+              {/* Action buttons */}
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={() => setIsFolderModalOpen(true)}
+                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-blue-50 dark:bg-blue-950/60 hover:bg-blue-100 dark:hover:bg-blue-900/60 text-blue-700 dark:text-blue-300 border border-blue-200 dark:border-blue-800 text-xs font-semibold transition-colors cursor-pointer"
+                >
+                  <FolderUp className="w-3.5 h-3.5" />
+                  <span>{isEn ? 'Change / Import Folder' : 'Changer / Importer Dossier'}</span>
+                </button>
 
-        {activeTab === 'new_event' && (
-          <NewEventSimulator
-            analysis={analysis}
-            onEventApplied={handleEventApplied}
-          />
-        )}
+                <button
+                  onClick={handleResetProject}
+                  title={isEn ? 'Clear dataset' : 'Vider le dossier'}
+                  className="p-1.5 rounded-xl text-slate-400 hover:text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-950/30 transition-colors"
+                >
+                  <Trash2 className="w-4 h-4" />
+                </button>
+              </div>
+            </div>
 
-        {activeTab === 'decisions' && (
-          <DecisionsRegister
-            analysis={analysis}
-            documents={documents}
-            onSelectDocument={setSelectedDocument}
-          />
-        )}
+            {/* Normal Full Tab Views */}
+            {activeTab === 'overview' && (
+              <DashboardOverview
+                analysis={analysis}
+                documents={documents}
+                onSelectDocument={setSelectedDocument}
+                onNavigateTab={setActiveTab}
+              />
+            )}
 
-        {activeTab === 'contradictions' && (
-          <ContradictionsDetector
-            analysis={analysis}
-            documents={documents}
-            onSelectDocument={setSelectedDocument}
-          />
-        )}
+            {activeTab === 'chat' && (
+              <RagChat
+                documents={documents}
+                onSelectDocument={setSelectedDocument}
+                initialQuery={initialChatQuery}
+              />
+            )}
 
-        {activeTab === 'timeline' && (
-          <TimelineView
-            analysis={analysis}
-            documents={documents}
-            onSelectDocument={setSelectedDocument}
-          />
-        )}
+            {activeTab === 'new_event' && (
+              <NewEventSimulator
+                analysis={analysis}
+                onEventApplied={handleEventApplied}
+              />
+            )}
 
-        {activeTab === 'briefing' && (
-          <ExecutiveBriefing
-            analysis={analysis}
-            documents={documents}
-          />
-        )}
+            {activeTab === 'decisions' && (
+              <DecisionsRegister
+                analysis={analysis}
+                documents={documents}
+                onSelectDocument={setSelectedDocument}
+              />
+            )}
 
-        {activeTab === 'more' && (
-          <MorePage
-            analysis={analysis}
-            documents={documents}
-            onSelectDocument={setSelectedDocument}
-            onRefreshAnalysis={handleRefreshAnalysis}
-            isAnalyzing={isAnalyzing}
-            onDocumentsAdded={handleDocumentsAdded}
-          />
+            {activeTab === 'contradictions' && (
+              <ContradictionsDetector
+                analysis={analysis}
+                documents={documents}
+                onSelectDocument={setSelectedDocument}
+              />
+            )}
+
+            {activeTab === 'timeline' && (
+              <TimelineView
+                analysis={analysis}
+                documents={documents}
+                onSelectDocument={setSelectedDocument}
+              />
+            )}
+
+            {activeTab === 'briefing' && (
+              <ExecutiveBriefing
+                analysis={analysis}
+                documents={documents}
+              />
+            )}
+
+            {activeTab === 'more' && (
+              <MorePage
+                analysis={analysis}
+                documents={documents}
+                onSelectDocument={setSelectedDocument}
+                onRefreshAnalysis={handleRefreshAnalysis}
+                isAnalyzing={isAnalyzing}
+                onDocumentsAdded={handleDocumentsAdded}
+              />
+            )}
+          </div>
         )}
       </main>
 
@@ -182,6 +236,15 @@ export default function App() {
         isOpen={isLocalGuideOpen}
         onClose={() => setIsLocalGuideOpen(false)}
       />
+
+      {/* Dataset Folder Re-Import Modal */}
+      {isFolderModalOpen && (
+        <DatasetImportScreen
+          isModal
+          onClose={() => setIsFolderModalOpen(false)}
+          onDatasetLoaded={handleDatasetLoaded}
+        />
+      )}
     </div>
   );
 }
