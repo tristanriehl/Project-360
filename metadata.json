@@ -1,0 +1,6 @@
+{
+  "name": "Project 360 - RAG Brain & Operational Memory",
+  "description": "Intelligent RAG operational memory engine and dynamic project dashboard. Synthesizes emails, documents, tickets, and meetings into an interactive 360° cockpit with contradiction detection, timeline reconstruction, and decision evidence tracking.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
