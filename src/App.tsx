@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Navbar, TabType } from './components/Navbar';
+import { Sidebar, TabType } from './components/Sidebar';
 import { DashboardOverview } from './components/DashboardOverview';
 import { ProjectBrainGraph } from './components/ProjectBrainGraph';
 import { RagChat } from './components/RagChat';
@@ -89,9 +89,9 @@ export default function App() {
   };
 
   return (
-    <div className="min-h-screen bg-slate-100/70 dark:bg-slate-950 text-slate-900 dark:text-slate-100 antialiased font-sans flex flex-col">
-      {/* Navigation Top Bar */}
-      <Navbar
+    <div className="min-h-screen bg-slate-100/70 dark:bg-slate-950 text-slate-900 dark:text-slate-100 antialiased font-sans flex flex-row">
+      {/* Collapsible Side Navigation Bar */}
+      <Sidebar
         activeTab={activeTab}
         setActiveTab={(tab) => {
           setActiveTab(tab);
@@ -101,19 +101,17 @@ export default function App() {
         onReset={handleResetProject}
         onRefresh={handleRefreshAnalysis}
         isAnalyzing={isAnalyzing}
-        onOpenQuickAsk={handleQuickAsk}
         onOpenLocalGuide={() => setIsLocalGuideOpen(true)}
       />
 
       {/* Main Content Viewport */}
-      <main className="flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 pt-6">
+      <main className="flex-1 min-w-0 p-5 sm:p-7 max-w-7xl mx-auto overflow-y-auto">
         {activeTab === 'overview' && (
           <DashboardOverview
             analysis={analysis}
             documents={documents}
             onSelectDocument={setSelectedDocument}
             onNavigateTab={setActiveTab}
-            onQuickAsk={handleQuickAsk}
           />
         )}
 
