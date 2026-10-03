@@ -4,6 +4,7 @@ import { ProjectAnalysis, ProjectDocument } from '../types/project';
 import { CombinedBrainAndSources } from './CombinedBrainAndSources';
 import { ArchitectureAdvisor } from './ArchitectureAdvisor';
 import { SystemFlowchart } from './SystemFlowchart';
+import { useLanguage } from '../context/LanguageContext';
 
 export type MoreSubTabType = 'flowchart' | 'brain_sources' | 'advisor';
 
@@ -27,6 +28,7 @@ export const MorePage: React.FC<MorePageProps> = ({
   initialSubTab = 'flowchart'
 }) => {
   const [activeSubTab, setActiveSubTab] = useState<MoreSubTabType>(initialSubTab);
+  const { t } = useLanguage();
 
   return (
     <div className="space-y-6 animate-fadeIn pb-12">
@@ -39,10 +41,10 @@ export const MorePage: React.FC<MorePageProps> = ({
             </div>
             <div>
               <h1 className="text-xl font-bold text-slate-900 dark:text-white">
-                Centre Technique Avancé
+                {t('more_title')}
               </h1>
               <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
-                Diagrammes Mermaid.js, graphe de connaissances relationnel et benchmark comparatif des LLMs
+                {t('more_subtitle')}
               </p>
             </div>
           </div>
@@ -59,7 +61,7 @@ export const MorePage: React.FC<MorePageProps> = ({
             }`}
           >
             <Workflow className="w-3.5 h-3.5" />
-            <span>Architecture &amp; Flux (Mermaid)</span>
+            <span>{t('more_tab_flowchart')}</span>
           </button>
 
           <button
@@ -71,7 +73,7 @@ export const MorePage: React.FC<MorePageProps> = ({
             }`}
           >
             <Network className="w-3.5 h-3.5" />
-            <span>Cerveau &amp; Sources</span>
+            <span>{t('more_tab_brain_sources')}</span>
           </button>
 
           <button
@@ -83,7 +85,7 @@ export const MorePage: React.FC<MorePageProps> = ({
             }`}
           >
             <Cpu className="w-3.5 h-3.5" />
-            <span>Frontier vs Local LLM</span>
+            <span>{t('more_tab_advisor')}</span>
           </button>
         </div>
       </div>

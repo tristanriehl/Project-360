@@ -17,6 +17,7 @@ import {
 } from 'lucide-react';
 import { ProjectAnalysis } from '../types/project';
 import { ThemeToggle } from '../context/ThemeContext';
+import { LanguageToggle, useLanguage } from '../context/LanguageContext';
 
 export type TabType = 
   | 'overview' 
@@ -48,16 +49,17 @@ export const Sidebar: React.FC<SidebarProps> = ({
   onOpenLocalGuide
 }) => {
   const [isCollapsed, setIsCollapsed] = useState(false);
+  const { t } = useLanguage();
 
   const navItems: { id: TabType; label: string; icon: React.ReactNode; badge?: number | string; highlight?: boolean }[] = [
-    { id: 'overview', label: 'Vue d\'ensemble', icon: <LayoutDashboard className="w-4 h-4 shrink-0" /> },
-    { id: 'chat', label: 'Assistant RAG', icon: <MessageSquareText className="w-4 h-4 text-blue-500 shrink-0" /> },
-    { id: 'new_event', label: 'Nouvel Événement', icon: <Sparkles className="w-4 h-4 text-amber-500 shrink-0" />, highlight: true },
-    { id: 'decisions', label: 'Décisions & Preuves', icon: <Scale className="w-4 h-4 text-emerald-500 shrink-0" />, badge: analysis.decisions.length },
-    { id: 'contradictions', label: 'Contradictions', icon: <AlertCircle className="w-4 h-4 text-rose-500 shrink-0" />, badge: analysis.contradictions.length },
-    { id: 'timeline', label: 'Chronologie', icon: <Clock className="w-4 h-4 text-sky-500 shrink-0" /> },
-    { id: 'briefing', label: 'Briefing Exécutif', icon: <FileSpreadsheet className="w-4 h-4 text-teal-500 shrink-0" /> },
-    { id: 'more', label: 'More (Flux & Graphe)', icon: <Layers className="w-4 h-4 text-indigo-500 shrink-0" /> },
+    { id: 'overview', label: t('nav_overview'), icon: <LayoutDashboard className="w-4 h-4 shrink-0" /> },
+    { id: 'chat', label: t('nav_chat'), icon: <MessageSquareText className="w-4 h-4 text-blue-500 shrink-0" /> },
+    { id: 'new_event', label: t('nav_new_event'), icon: <Sparkles className="w-4 h-4 text-amber-500 shrink-0" />, highlight: true },
+    { id: 'decisions', label: t('nav_decisions'), icon: <Scale className="w-4 h-4 text-emerald-500 shrink-0" />, badge: analysis.decisions.length },
+    { id: 'contradictions', label: t('nav_contradictions'), icon: <AlertCircle className="w-4 h-4 text-rose-500 shrink-0" />, badge: analysis.contradictions.length },
+    { id: 'timeline', label: t('nav_timeline'), icon: <Clock className="w-4 h-4 text-sky-500 shrink-0" /> },
+    { id: 'briefing', label: t('nav_briefing'), icon: <FileSpreadsheet className="w-4 h-4 text-teal-500 shrink-0" /> },
+    { id: 'more', label: t('nav_more'), icon: <Layers className="w-4 h-4 text-indigo-500 shrink-0" /> },
   ];
 
   return (
@@ -130,39 +132,44 @@ export const Sidebar: React.FC<SidebarProps> = ({
         {/* Local Demo Guide */}
         <button
           onClick={onOpenLocalGuide}
-          title={isCollapsed ? 'Guide Démo Locale' : undefined}
+          title={isCollapsed ? t('nav_local_demo') : undefined}
           className={`w-full flex items-center gap-2.5 px-3 py-2 rounded-xl text-xs font-semibold text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors ${
             isCollapsed ? 'justify-center px-2' : ''
           }`}
         >
           <Laptop className="w-4 h-4 text-purple-600 dark:text-purple-400 shrink-0" />
-          {!isCollapsed && <span className="truncate">Démo Locale</span>}
+          {!isCollapsed && <span className="truncate">{t('nav_local_demo')}</span>}
         </button>
 
         {/* Re-analyze */}
         <button
           onClick={onRefresh}
           disabled={isAnalyzing}
-          title={isCollapsed ? 'Re-synthétiser avec l\'IA' : undefined}
+          title={isCollapsed ? t('nav_resynthesize') : undefined}
           className={`w-full flex items-center gap-2.5 px-3 py-2 rounded-xl text-xs font-semibold text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors ${
             isAnalyzing ? 'text-blue-600 animate-pulse' : ''
           } ${isCollapsed ? 'justify-center px-2' : ''}`}
         >
           <RefreshCw className={`w-4 h-4 shrink-0 ${isAnalyzing ? 'animate-spin text-blue-600' : ''}`} />
-          {!isCollapsed && <span className="truncate">{isAnalyzing ? 'Analyse...' : 'Re-synthétiser'}</span>}
+          {!isCollapsed && <span className="truncate">{isAnalyzing ? t('nav_analyzing') : t('nav_resynthesize')}</span>}
         </button>
 
         {/* Reset Data */}
         <button
           onClick={onReset}
-          title={isCollapsed ? 'Réinitialiser aux données par défaut' : undefined}
+          title={isCollapsed ? t('nav_reset') : undefined}
           className={`w-full flex items-center gap-2.5 px-3 py-2 rounded-xl text-xs font-semibold text-slate-400 hover:text-rose-600 dark:hover:text-rose-400 hover:bg-rose-50 dark:hover:bg-rose-950/30 transition-colors ${
             isCollapsed ? 'justify-center px-2' : ''
           }`}
         >
           <RotateCcw className="w-4 h-4 shrink-0" />
-          {!isCollapsed && <span className="truncate">Réinitialiser</span>}
+          {!isCollapsed && <span className="truncate">{t('nav_reset')}</span>}
         </button>
+
+        {/* Language Switcher (EN default, FR) - Placed right above the theme buttons */}
+        <div className="pt-2">
+          <LanguageToggle isCollapsed={isCollapsed} />
+        </div>
 
         {/* Theme Switcher (System default, Light, Dark) */}
         <div className="pt-1">
