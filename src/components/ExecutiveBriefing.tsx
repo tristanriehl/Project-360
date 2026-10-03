@@ -76,7 +76,7 @@ export const ExecutiveBriefing: React.FC<ExecutiveBriefingProps> = ({
       md += `- **[${(r.severity || 'medium').toUpperCase()}] ${r.title}**\n  Mitigation: ${r.mitigation}\n`;
     });
     md += `\n## 4. Bilan Financier & Litiges\n`;
-    md += `- Contrat initial : ${financials.contractTotal}\n`;
+    md += `- Budget / Contrat : ${financials.contractTotal}\n`;
     md += `- Total facturé : ${financials.invoicedTotal}\n`;
     md += `- Total payé : ${financials.paidTotal}\n`;
     md += `- Montant en litige : ${financials.disputedAmount}\n`;
@@ -104,11 +104,11 @@ export const ExecutiveBriefing: React.FC<ExecutiveBriefingProps> = ({
               <FileSpreadsheet className="w-5 h-5" />
             </div>
             <h2 className="text-base font-black text-slate-900 dark:text-white">
-              Génération de Rapports Exécutifs, Audit &amp; Comparaison Multi-Projets
+              Génération de Rapports Exécutifs &amp; Audit ({analysis?.projectName})
             </h2>
           </div>
           <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">
-            Synthèses prêtes pour la direction générale, comités d'audit et transfert de connaissances inter-projets.
+            Synthèses consolidées pour la direction générale, comités d'audit et arbitrage des décisions.
           </p>
         </div>
 
@@ -116,7 +116,7 @@ export const ExecutiveBriefing: React.FC<ExecutiveBriefingProps> = ({
         <div className="flex items-center gap-2">
           <button
             onClick={() => setActiveTab('briefing')}
-            className={`px-3 py-1.5 rounded-xl text-xs font-semibold transition-colors ${
+            className={`px-3 py-1.5 rounded-xl text-xs font-semibold transition-colors cursor-pointer ${
               activeTab === 'briefing'
                 ? 'bg-teal-600 text-white font-bold'
                 : 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300'
@@ -126,7 +126,7 @@ export const ExecutiveBriefing: React.FC<ExecutiveBriefingProps> = ({
           </button>
           <button
             onClick={() => setActiveTab('audit_dossier')}
-            className={`px-3 py-1.5 rounded-xl text-xs font-semibold transition-colors ${
+            className={`px-3 py-1.5 rounded-xl text-xs font-semibold transition-colors cursor-pointer ${
               activeTab === 'audit_dossier'
                 ? 'bg-teal-600 text-white font-bold'
                 : 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300'
@@ -136,7 +136,7 @@ export const ExecutiveBriefing: React.FC<ExecutiveBriefingProps> = ({
           </button>
           <button
             onClick={() => setActiveTab('comparison')}
-            className={`px-3 py-1.5 rounded-xl text-xs font-semibold transition-colors ${
+            className={`px-3 py-1.5 rounded-xl text-xs font-semibold transition-colors cursor-pointer ${
               activeTab === 'comparison'
                 ? 'bg-teal-600 text-white font-bold'
                 : 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300'
@@ -156,7 +156,7 @@ export const ExecutiveBriefing: React.FC<ExecutiveBriefingProps> = ({
               <button
                 onClick={handleGenerateAiBriefing}
                 disabled={isGenerating}
-                className="px-4 py-2 rounded-xl bg-gradient-to-r from-teal-600 to-emerald-600 hover:from-teal-700 hover:to-emerald-700 text-white text-xs font-bold flex items-center gap-1.5 shadow-md shadow-teal-500/20 transition-all"
+                className="px-4 py-2 rounded-xl bg-gradient-to-r from-teal-600 to-emerald-600 hover:from-teal-700 hover:to-emerald-700 text-white text-xs font-bold flex items-center gap-1.5 shadow-md shadow-teal-500/20 transition-all cursor-pointer"
               >
                 {isGenerating ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Sparkles className="w-3.5 h-3.5" />}
                 <span>Régénérer la note exécutive (IA)</span>
@@ -166,14 +166,14 @@ export const ExecutiveBriefing: React.FC<ExecutiveBriefingProps> = ({
             <div className="flex items-center gap-2">
               <button
                 onClick={handleCopyMarkdown}
-                className="px-3 py-2 rounded-xl bg-white dark:bg-slate-800 hover:bg-slate-100 text-slate-700 dark:text-slate-200 text-xs font-semibold border border-slate-200 dark:border-slate-700 flex items-center gap-1.5 transition-colors"
+                className="px-3 py-2 rounded-xl bg-white dark:bg-slate-800 hover:bg-slate-100 text-slate-700 dark:text-slate-200 text-xs font-semibold border border-slate-200 dark:border-slate-700 flex items-center gap-1.5 transition-colors cursor-pointer"
               >
                 {copied ? <Check className="w-3.5 h-3.5 text-emerald-600" /> : <Copy className="w-3.5 h-3.5" />}
                 <span>Copier en Markdown</span>
               </button>
               <button
                 onClick={handlePrint}
-                className="px-3 py-2 rounded-xl bg-white dark:bg-slate-800 hover:bg-slate-100 text-slate-700 dark:text-slate-200 text-xs font-semibold border border-slate-200 dark:border-slate-700 flex items-center gap-1.5 transition-colors"
+                className="px-3 py-2 rounded-xl bg-white dark:bg-slate-800 hover:bg-slate-100 text-slate-700 dark:text-slate-200 text-xs font-semibold border border-slate-200 dark:border-slate-700 flex items-center gap-1.5 transition-colors cursor-pointer"
               >
                 <Printer className="w-3.5 h-3.5" />
                 <span>Imprimer / PDF</span>
@@ -189,10 +189,10 @@ export const ExecutiveBriefing: React.FC<ExecutiveBriefingProps> = ({
                   Note Stratégique à l'Attention du Comité de Direction
                 </div>
                 <h1 className="text-xl font-black text-slate-900 dark:text-white mt-1">
-                  Briefing Exécutif 360° — Projet NOVA
+                  Briefing Exécutif 360° — {analysis.projectName}
                 </h1>
                 <p className="text-xs text-slate-500 mt-1">
-                  Généré le {new Date().toLocaleDateString('fr-CA')} • Porteur : Mathieu Gagnon (Chargé de projet)
+                  Généré le {new Date().toLocaleDateString('fr-CA')} • Basé sur {documents.length} pièces documentaires
                 </p>
               </div>
 
@@ -226,10 +226,10 @@ export const ExecutiveBriefing: React.FC<ExecutiveBriefingProps> = ({
                 {/* 2. Décisions majeures */}
                 <div>
                   <h3 className="text-xs font-black uppercase tracking-wider text-slate-400 mb-2">
-                    2. Décisions &amp; Arbitrages Clés Actés
+                    2. Décisions &amp; Arbitrages Clés Actés ({decisions.length})
                   </h3>
                   <div className="space-y-2">
-                    {analysis.decisions.slice(0, 3).map((d) => (
+                    {decisions.slice(0, 4).map((d) => (
                       <div key={d.id} className="p-3 rounded-xl bg-slate-50 dark:bg-slate-800 text-xs border border-slate-200/60 dark:border-slate-700/60">
                         <div className="flex justify-between items-center font-bold text-slate-900 dark:text-white">
                           <span>{d.title}</span>
@@ -250,20 +250,20 @@ export const ExecutiveBriefing: React.FC<ExecutiveBriefingProps> = ({
                   </h3>
                   <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 text-xs">
                     <div className="p-3 rounded-xl bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700">
-                      <div className="text-[10px] text-slate-400">Budget Fournisseur</div>
-                      <div className="text-sm font-black text-slate-900 dark:text-white mt-1">310 000 $</div>
+                      <div className="text-[10px] text-slate-400">Budget Initial</div>
+                      <div className="text-sm font-black text-slate-900 dark:text-white mt-1">{financials.contractTotal}</div>
                     </div>
                     <div className="p-3 rounded-xl bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700">
                       <div className="text-[10px] text-slate-400">Total Facturé</div>
-                      <div className="text-sm font-black text-slate-900 dark:text-white mt-1">254 500 $</div>
+                      <div className="text-sm font-black text-slate-900 dark:text-white mt-1">{financials.invoicedTotal}</div>
                     </div>
                     <div className="p-3 rounded-xl bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-200 dark:border-emerald-800">
                       <div className="text-[10px] text-emerald-700 dark:text-emerald-300">Total Acquitté</div>
-                      <div className="text-sm font-black text-emerald-600 dark:text-emerald-400 mt-1">186 000 $</div>
+                      <div className="text-sm font-black text-emerald-600 dark:text-emerald-400 mt-1">{financials.paidTotal}</div>
                     </div>
                     <div className="p-3 rounded-xl bg-rose-50 dark:bg-rose-950/40 border border-rose-200 dark:border-rose-800">
-                      <div className="text-[10px] text-rose-700 dark:text-rose-300">Litige Facture Boréal</div>
-                      <div className="text-sm font-black text-rose-600 dark:text-rose-400 mt-1">14 500 $</div>
+                      <div className="text-[10px] text-rose-700 dark:text-rose-300">Montant en litige</div>
+                      <div className="text-sm font-black text-rose-600 dark:text-rose-400 mt-1">{financials.disputedAmount}</div>
                     </div>
                   </div>
                 </div>
@@ -271,10 +271,10 @@ export const ExecutiveBriefing: React.FC<ExecutiveBriefingProps> = ({
                 {/* 4. Risques résiduels */}
                 <div>
                   <h3 className="text-xs font-black uppercase tracking-wider text-slate-400 mb-2">
-                    4. Risques Résiduels &amp; Actions Immédiates
+                    4. Risques Résiduels &amp; Actions Immédiates ({risks.length})
                   </h3>
                   <div className="space-y-2">
-                    {analysis.risks.map((r) => (
+                    {risks.slice(0, 4).map((r) => (
                       <div key={r.id} className="p-3 rounded-xl bg-slate-50 dark:bg-slate-800 text-xs border border-slate-200 dark:border-slate-700 flex justify-between items-center">
                         <div>
                           <div className="font-bold text-slate-900 dark:text-white">{r.title}</div>
@@ -299,16 +299,16 @@ export const ExecutiveBriefing: React.FC<ExecutiveBriefingProps> = ({
           <div className="flex items-center gap-2">
             <FileCheck className="w-5 h-5 text-teal-600" />
             <h3 className="text-sm font-black text-slate-900 dark:text-white">
-              Dossier de Conformité &amp; Preuves Documentées
+              Dossier de Conformité &amp; Preuves Documentées ({decisions.length} décisions)
             </h3>
           </div>
 
           <div className="space-y-4">
-            {analysis.decisions.map((dec) => (
+            {decisions.map((dec) => (
               <div key={dec.id} className="p-4 rounded-xl bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 space-y-2">
                 <div className="flex justify-between text-xs">
                   <span className="font-bold text-slate-900 dark:text-white">{dec.id} — {dec.title}</span>
-                  <span className="text-slate-400">{dec.date}</span>
+                  <span className="text-slate-400">{dec.date} • {dec.owner}</span>
                 </div>
                 <p className="text-xs text-slate-600 dark:text-slate-300 font-medium">
                   {dec.rationale}
@@ -332,27 +332,27 @@ export const ExecutiveBriefing: React.FC<ExecutiveBriefingProps> = ({
                 Comparaison Inter-Projets &amp; Transfert de Connaissances
               </h3>
               <p className="text-xs text-slate-500">
-                Mise en perspective de <strong>Projet NOVA</strong> (En cours) face au <strong>Projet ORION</strong> (Clôturé avec succès).
+                Mise en perspective de <strong>{analysis.projectName}</strong> face au <strong>Projet ORION</strong> (Clôturé avec succès).
               </p>
             </div>
           </div>
 
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6 text-xs">
-            {/* Project NOVA Card */}
+            {/* Project A Card */}
             <div className="p-5 rounded-2xl bg-blue-50/60 dark:bg-blue-950/30 border border-blue-200 dark:border-blue-900 space-y-3">
               <div className="flex justify-between items-center">
                 <h4 className="text-sm font-black text-blue-900 dark:text-blue-200">
-                  Projet NOVA (Plateforme Client 360)
+                  {analysis.projectName}
                 </h4>
                 <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-amber-100 text-amber-800 border border-amber-300">
-                  En cours (28 Nov 2026)
+                  {analysis.statusLabel}
                 </span>
               </div>
               <div className="space-y-1.5 text-slate-700 dark:text-slate-300">
-                <div>Budget : <strong>380 000 $ CAD</strong></div>
-                <div>Stack : <strong>Next.js SSR + NestJS + PostgreSQL (Canada Central)</strong></div>
-                <div>Gouvernance : <strong>Passation de gestion mi-projet (Élodie → Mathieu)</strong></div>
-                <div>Points chauds : <strong>Loi 25, bogue API CRM, litige facture INV-003</strong></div>
+                <div>Budget : <strong>{financials.contractTotal}</strong></div>
+                <div>Documents indexés : <strong>{documents.length} pièces</strong></div>
+                <div>Décisions actées : <strong>{decisions.length}</strong></div>
+                <div>Points de vigilance : <strong>{risks.length} risques identifiés</strong></div>
               </div>
             </div>
 
@@ -363,7 +363,7 @@ export const ExecutiveBriefing: React.FC<ExecutiveBriefingProps> = ({
                   Projet ORION (Chaîne Logistique)
                 </h4>
                 <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-emerald-100 text-emerald-800 border border-emerald-300">
-                  Clôturé avec Succès (Fév 2026)
+                  Clôturé avec Succès
                 </span>
               </div>
               <div className="space-y-1.5 text-slate-700 dark:text-slate-300">
@@ -382,13 +382,13 @@ export const ExecutiveBriefing: React.FC<ExecutiveBriefingProps> = ({
             </h4>
             <ul className="list-disc list-inside space-y-1 text-slate-600 dark:text-slate-300 leading-relaxed">
               <li>
-                <strong>Verrouillage contractuel des avenants (CR) :</strong> L'expérience d'ORION montre qu'une clause de signature préalable obligatoire sur bon de commande évite les contestations tardives comme celle de la facture INV-003 de Boréal.
+                <strong>Verrouillage contractuel des avenants (CR) :</strong> Une clause de signature préalable obligatoire sur bon de commande évite les contestations tardives.
               </li>
               <li>
                 <strong>Tests de performance continus :</strong> Intégrer les tests de charge dès la mi-parcours permet de traiter les indexations de base de données en amont sans stress pré-livraison.
               </li>
               <li>
-                <strong>Périmètre MVP strict :</strong> Le recentrage de NOVA sur le Web et le report de la fonction mobile en Phase 2 est un arbitrage exemplaire garantissant le respect de la date finale.
+                <strong>Périmètre MVP strict :</strong> Le recentrage sur le périmètre prioritaire et le phasage des fonctionnalités secondaires est un arbitrage exemplaire garantissant le respect de la date finale.
               </li>
             </ul>
           </div>

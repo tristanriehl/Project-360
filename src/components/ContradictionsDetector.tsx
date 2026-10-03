@@ -16,8 +16,12 @@ export const ContradictionsDetector: React.FC<ContradictionsDetectorProps> = ({
   const contradictions = analysis?.contradictions || [];
 
   const findDoc = (name?: string) => {
-    if (!name) return undefined;
-    return documents.find(d => d.name.toLowerCase().includes(name.toLowerCase()));
+    if (!name || documents.length === 0) return undefined;
+    const cleanName = name.toLowerCase().replace(/[^a-z0-9]/g, '');
+    return documents.find(d => {
+      const cleanDoc = d.name.toLowerCase().replace(/[^a-z0-9]/g, '');
+      return cleanDoc.includes(cleanName) || cleanName.includes(cleanDoc);
+    }) || documents[0];
   };
 
   return (
@@ -32,7 +36,7 @@ export const ContradictionsDetector: React.FC<ContradictionsDetectorProps> = ({
             <h2 className="text-base font-bold text-slate-900 dark:text-white">
               Contradictions &amp; Données Périmées
             </h2>
-            <p className="text-xs text-slate-500">Conflits documentaires et écarts identifiés</p>
+            <p className="text-xs text-slate-500">Conflits documentaires, écarts de dates et divergences identifiés</p>
           </div>
         </div>
 
@@ -46,8 +50,8 @@ export const ContradictionsDetector: React.FC<ContradictionsDetectorProps> = ({
         {contradictions.length === 0 ? (
           <div className="p-8 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 text-center space-y-2">
             <CheckCircle2 className="w-8 h-8 text-emerald-500 mx-auto" />
-            <h3 className="text-sm font-bold text-slate-900 dark:text-white">Aucune contradiction détectée</h3>
-            <p className="text-xs text-slate-500">Toutes les pièces documentaires sont cohérentes entre elles.</p>
+            <h3 className="text-sm font-bold text-slate-900 dark:text-white">Aucune contradiction bloquante détectée</h3>
+            <p className="text-xs text-slate-500">Toutes les pièces documentaires analysées sont cohérentes entre elles.</p>
           </div>
         ) : (
           contradictions.map((item, idx) => {
@@ -86,8 +90,8 @@ export const ContradictionsDetector: React.FC<ContradictionsDetectorProps> = ({
                   {/* Source A */}
                   <div className="p-3 rounded-xl bg-slate-50 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700 space-y-1.5">
                     <div className="flex items-center justify-between text-[11px] text-slate-500">
-                      <span className="flex items-center gap-1 font-semibold text-slate-700 dark:text-slate-300">
-                        <XCircle className="w-3.5 h-3.5 text-amber-500" /> {docAName}
+                      <span className="flex items-center gap-1 font-semibold text-slate-700 dark:text-slate-300 truncate max-w-[200px]">
+                        <XCircle className="w-3.5 h-3.5 text-amber-500 shrink-0" /> {docAName}
                       </span>
                       <span>{item?.sourceA?.date || ''}</span>
                     </div>
@@ -107,8 +111,8 @@ export const ContradictionsDetector: React.FC<ContradictionsDetectorProps> = ({
                   {/* Source B */}
                   <div className="p-3 rounded-xl bg-blue-50/50 dark:bg-blue-950/20 border border-blue-200/60 dark:border-blue-900/40 space-y-1.5">
                     <div className="flex items-center justify-between text-[11px] text-blue-800 dark:text-blue-300">
-                      <span className="flex items-center gap-1 font-semibold">
-                        <CheckCircle2 className="w-3.5 h-3.5 text-emerald-500" /> {docBName}
+                      <span className="flex items-center gap-1 font-semibold truncate max-w-[200px]">
+                        <CheckCircle2 className="w-3.5 h-3.5 text-emerald-500 shrink-0" /> {docBName}
                       </span>
                       <span>{item?.sourceB?.date || ''}</span>
                     </div>
@@ -136,7 +140,7 @@ export const ContradictionsDetector: React.FC<ContradictionsDetectorProps> = ({
                   </div>
                   <div className="text-[11px] text-emerald-950 dark:text-emerald-200 flex items-center gap-1 pt-1">
                     <Lightbulb className="w-3.5 h-3.5 text-amber-500 shrink-0" />
-                    <span><strong>Action :</strong> {item.recommendation || 'Se référer au compte-rendu de gouvernance le plus récent.'}</span>
+                    <span><strong>Recommandation :</strong> {item.recommendation || 'Se référer au compte-rendu de gouvernance le plus récent.'}</span>
                   </div>
                 </div>
               </div>

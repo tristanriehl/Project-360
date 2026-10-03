@@ -5,6 +5,7 @@
 [![React](https://img.shields.io/badge/React-19.0-61dafb?logo=react&logoColor=black)](https://react.dev/)
 [![TailwindCSS](https://img.shields.io/badge/Tailwind_CSS-v4-38bdf8?logo=tailwindcss&logoColor=white)](https://tailwindcss.com/)
 [![Gemini](https://img.shields.io/badge/Gemini_3.1-Flash_Lite-8e75ff?logo=google&logoColor=white)](https://ai.google.dev/)
+[![Ollama](https://img.shields.io/badge/Ollama-Local_LLM-000000?logo=ollama&logoColor=white)](https://ollama.com/)
 
 > **GitHub Repository:** [https://github.com/tristanriehl/Project-360](https://github.com/tristanriehl/Project-360)
 > 
@@ -12,7 +13,43 @@
 
 ---
 
-## 🚀 How to Run Locally on Your Computer / Démarrage Local
+## 🦙 Running with a Local Ollama Model on Mac (100% Offline / Local GPU)
+
+You can run the full RAG assistant locally on your Mac (M1/M2/M3/M4 or Intel) using **Ollama**:
+
+### 1. Install Ollama on your Mac
+- **Via Homebrew** (recommended):
+  ```bash
+  brew install ollama
+  ```
+- **Or download the Mac app** from [https://ollama.com/download/mac](https://ollama.com/download/mac) and drag it to your Applications folder.
+
+### 2. Download and start a model
+Open Terminal on your Mac and run:
+```bash
+ollama run llama3.2
+```
+*(Other recommended models: `ollama run mistral` or `ollama run qwen2.5`)*
+
+Ollama runs a local HTTP server on `http://localhost:11434`.
+
+### 3. Configure `.env` in Project-360
+Create or update your `.env` file in the project folder:
+```env
+OLLAMA_HOST="http://localhost:11434"
+OLLAMA_MODEL="llama3.2"
+PORT=3000
+```
+
+### 4. Start Project-360
+```bash
+npm run dev
+```
+Open **[http://localhost:3000](http://localhost:3000)**. The RAG assistant will now query your local Ollama model directly on your Mac!
+
+---
+
+## 🚀 How to Run Locally on Your Computer / Démarrage Local Standard
 
 This application is built with **Node.js, Express, React 19, TypeScript, and Tailwind CSS v4**.
 
@@ -48,15 +85,18 @@ cp .env.example .env
 
 Edit `.env` with your preferred text editor:
 ```env
-# Optional: Set your Gemini API key for live generative synthesis
-# The app uses the ultra-fast and token-efficient gemini-3.1-flash-lite model
+# Option A: Local Ollama on Mac
+OLLAMA_HOST="http://localhost:11434"
+OLLAMA_MODEL="llama3.2"
+
+# Option B: Cloud Gemini API
 GEMINI_API_KEY="your_gemini_api_key_here"
 
-# Optional: Custom port (defaults to 3000)
+# Server port (defaults to 3000)
 PORT=3000
 ```
 
-> **Note**: Even without a `GEMINI_API_KEY`, the application includes an **offline local parser & heuristic RAG engine** so that you can test and demonstrate all features (decisions extraction, contradiction spotting, timeline generation, interactive graph, and briefing) directly on your machine.
+> **Note**: Even without an API key or Ollama, the application includes a **built-in offline local parser & heuristic RAG engine** so that all features (decisions extraction, contradiction spotting, timeline generation, and interactive graphs) work out of the box.
 
 #### 4. Start the Local Server
 ```bash
@@ -73,7 +113,7 @@ Navigate to:
 
 1. On the home screen, click **"Select Folder from Disk"** (or drag and drop your project directory).
 2. The folder parser automatically ingests:
-   - ✉️ **Emails (`.eml`)**: Parses headers (`From:`, `To:`, `Date:`, `Subject:`) and body text.
+   - ✉️ **Emails (`.eml`)**: Parses headers (`From:`, `To:`, `Date:`, `Subject:`) and body text with accent decoding.
    - 📝 **Documents & Notes (`.txt`, `.md`, `.json`, `.csv`, `.log`)**: Full text extraction.
    - 📊 **Spreadsheets & PDFs (`.xlsx`, `.pdf`, `.docx`)**: Structured data and readable text.
 3. The RAG cockpit immediately extracts verified decisions, contradictions, delivery milestones, and active risks strictly from your uploaded files.
@@ -88,22 +128,6 @@ Navigate to:
 | `npm run build` | Compiles frontend assets with TypeScript & Vite into `dist/` |
 | `npm start` | Runs the production fullstack server (`NODE_ENV=production`) |
 | `npm run lint` | Checks TypeScript compilation without emitting files (`tsc --noEmit`) |
-
----
-
-### ❓ Troubleshooting / Dépannage
-
-- **Port 3000 already in use?**
-  Change the port in `.env` (e.g. `PORT=3001`) or run:
-  ```bash
-  PORT=3001 npm run dev
-  ```
-- **Windows PowerShell script execution policy?**
-  If `tsx` or `npm` fails due to execution policy, run:
-  ```powershell
-  Set-ExecutionPolicy -Scope Process -ExecutionPolicy Bypass
-  npm run dev
-  ```
 
 ---
 

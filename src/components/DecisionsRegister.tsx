@@ -24,15 +24,25 @@ export const DecisionsRegister: React.FC<DecisionsRegisterProps> = ({
       const q = search.toLowerCase();
       const match = (d.title || '').toLowerCase().includes(q) ||
                     (d.rationale || '').toLowerCase().includes(q) ||
-                    (d.owner || '').toLowerCase().includes(q);
+                    (d.owner || '').toLowerCase().includes(q) ||
+                    (d.sourceDocName || '').toLowerCase().includes(q);
       if (!match) return false;
     }
     return true;
   });
 
-  const getSourceDoc = (sourceName?: string) => {
-    if (!sourceName) return null;
-    return documents.find(d => d.name.toLowerCase().includes(sourceName.toLowerCase()));
+  const getSourceDoc = (sourceName?: string, sourceId?: string) => {
+    if (!documents || documents.length === 0) return null;
+    if (sourceId) {
+      const byId = documents.find(d => d.id === sourceId);
+      if (byId) return byId;
+    }
+    if (!sourceName) return documents[0] || null;
+    const cleanSource = sourceName.toLowerCase().replace(/[^a-z0-9]/g, '');
+    return documents.find(d => {
+      const cleanDoc = d.name.toLowerCase().replace(/[^a-z0-9]/g, '');
+      return cleanDoc.includes(cleanSource) || cleanSource.includes(cleanDoc);
+    }) || documents[0] || null;
   };
 
   const getStatusBadge = (status: Decision['status']) => {
@@ -51,7 +61,11 @@ export const DecisionsRegister: React.FC<DecisionsRegisterProps> = ({
           </span>
         );
       default:
-        return null;
+        return (
+          <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-semibold bg-blue-100 text-blue-800 dark:bg-blue-950/60 dark:text-blue-300 border border-blue-300 dark:border-blue-800">
+            Documentée
+          </span>
+        );
     }
   };
 
@@ -65,9 +79,9 @@ export const DecisionsRegister: React.FC<DecisionsRegisterProps> = ({
           </div>
           <div>
             <h2 className="text-base font-bold text-slate-900 dark:text-white">
-              Décisions &amp; Preuves Documentées
+              Décisions &amp; Preuves Documentées ({decisionsList.length})
             </h2>
-            <p className="text-xs text-slate-500">Traçabilité des arbitrages officiels</p>
+            <p className="text-xs text-slate-500">Traçabilité et citations textuelles issues de vos documents</p>
           </div>
         </div>
 
@@ -78,8 +92,8 @@ export const DecisionsRegister: React.FC<DecisionsRegisterProps> = ({
             <input
               type="text"
               value={search}
-              onChange={(e) => setSearchQuerySafe(e.target.value)}
-              placeholder="Rechercher..."
+              onChange={(e) => setSearch(e.target.value)}
+              placeholder="Rechercher une décision..."
               className="pl-8 pr-3 py-1.5 text-xs bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-slate-800 dark:text-slate-200 focus:outline-none focus:ring-2 focus:ring-emerald-500"
             />
           </div>
@@ -89,7 +103,7 @@ export const DecisionsRegister: React.FC<DecisionsRegisterProps> = ({
             onChange={(e) => setStatusFilter(e.target.value)}
             className="px-2.5 py-1.5 text-xs bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-slate-800 dark:text-slate-200 font-semibold focus:outline-none"
           >
-            <option value="all">Toutes ({analysis.decisions.length})</option>
+            <option value="all">Toutes ({decisionsList.length})</option>
             <option value="approved">Actées</option>
           </select>
         </div>
@@ -97,72 +111,74 @@ export const DecisionsRegister: React.FC<DecisionsRegisterProps> = ({
 
       {/* Decisions List */}
       <div className="space-y-3">
-        {filteredDecisions.map((dec) => {
-          const doc = getSourceDoc(dec.sourceDocName);
+        {filteredDecisions.length === 0 ? (
+          <div className="p-8 text-center bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 text-slate-500 text-xs">
+            Aucune décision trouvée pour cette recherche.
+          </div>
+        ) : (
+          filteredDecisions.map((dec) => {
+            const doc = getSourceDoc(dec.sourceDocName, dec.sourceDocId);
 
-          return (
-            <div
-              key={dec.id}
-              className="p-4 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-xs space-y-3"
-            >
-              {/* Header */}
-              <div className="flex items-center justify-between gap-2">
-                <div className="flex items-center gap-2">
-                  <span className="font-mono text-xs font-bold text-emerald-600 dark:text-emerald-400">
-                    {dec.id}
-                  </span>
-                  <h3 className="text-sm font-bold text-slate-900 dark:text-white">
-                    {dec.title}
-                  </h3>
+            return (
+              <div
+                key={dec.id}
+                className="p-4 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-xs space-y-3"
+              >
+                {/* Header */}
+                <div className="flex items-center justify-between gap-2">
+                  <div className="flex items-center gap-2">
+                    <span className="font-mono text-xs font-bold text-emerald-600 dark:text-emerald-400">
+                      {dec.id}
+                    </span>
+                    <h3 className="text-sm font-bold text-slate-900 dark:text-white">
+                      {dec.title}
+                    </h3>
+                  </div>
+                  {getStatusBadge(dec.status)}
                 </div>
-                {getStatusBadge(dec.status)}
-              </div>
 
-              {/* Rationale & Impact */}
-              <div className="text-xs space-y-1">
-                <p className="text-slate-700 dark:text-slate-300">
-                  <strong className="text-slate-900 dark:text-white">Justification :</strong> {dec.rationale}
-                </p>
-                <p className="text-slate-500 dark:text-slate-400">
-                  <strong>Impact :</strong> {dec.impact}
-                </p>
-              </div>
-
-              {/* Evidence Quote */}
-              {dec.evidenceQuote && (
-                <div className="p-2.5 rounded-lg bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-xs">
-                  <span className="font-semibold text-slate-500 text-[10px] uppercase block mb-0.5">Preuve textuelle :</span>
-                  <p className="font-mono italic text-slate-800 dark:text-slate-200 text-[11px]">
-                    "{dec.evidenceQuote}"
+                {/* Rationale & Impact */}
+                <div className="text-xs space-y-1">
+                  <p className="text-slate-700 dark:text-slate-300">
+                    <strong className="text-slate-900 dark:text-white">Justification :</strong> {dec.rationale}
+                  </p>
+                  <p className="text-slate-500 dark:text-slate-400">
+                    <strong>Impact :</strong> {dec.impact}
                   </p>
                 </div>
-              )}
 
-              {/* Meta footer */}
-              <div className="flex items-center justify-between text-[11px] text-slate-400 pt-2 border-t border-slate-100 dark:border-slate-800">
-                <div className="flex items-center gap-3">
-                  <span>Par : <strong className="text-slate-700 dark:text-slate-300">{dec.owner}</strong></span>
-                  <span>Date : <strong>{dec.date}</strong></span>
-                </div>
-                {doc && (
-                  <button
-                    onClick={() => onSelectDocument(doc)}
-                    className="text-blue-600 hover:underline flex items-center gap-1 font-semibold"
-                  >
-                    <FileText className="w-3 h-3" />
-                    <span>{dec.sourceDocName}</span>
-                    <ExternalLink className="w-2.5 h-2.5" />
-                  </button>
+                {/* Evidence Quote */}
+                {dec.evidenceQuote && (
+                  <div className="p-2.5 rounded-lg bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-xs">
+                    <span className="font-semibold text-slate-500 text-[10px] uppercase block mb-0.5">Preuve textuelle :</span>
+                    <p className="font-mono italic text-slate-800 dark:text-slate-200 text-[11px]">
+                      "{dec.evidenceQuote}"
+                    </p>
+                  </div>
                 )}
+
+                {/* Meta footer */}
+                <div className="flex items-center justify-between text-[11px] text-slate-400 pt-2 border-t border-slate-100 dark:border-slate-800">
+                  <div className="flex items-center gap-3">
+                    <span>Par : <strong className="text-slate-700 dark:text-slate-300">{dec.owner}</strong></span>
+                    <span>Date : <strong>{dec.date}</strong></span>
+                  </div>
+                  {doc && (
+                    <button
+                      onClick={() => onSelectDocument(doc)}
+                      className="text-blue-600 hover:underline flex items-center gap-1 font-semibold cursor-pointer"
+                    >
+                      <FileText className="w-3 h-3" />
+                      <span>{dec.sourceDocName || doc.name}</span>
+                      <ExternalLink className="w-2.5 h-2.5" />
+                    </button>
+                  )}
+                </div>
               </div>
-            </div>
-          );
-        })}
+            );
+          })
+        )}
       </div>
     </div>
   );
-
-  function setSearchQuerySafe(val: string) {
-    setSearch(val);
-  }
 };

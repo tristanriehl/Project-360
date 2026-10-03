@@ -63,11 +63,11 @@ export const TimelineView: React.FC<TimelineViewProps> = ({
               <Clock className="w-5 h-5" />
             </div>
             <h2 className="text-base font-black text-slate-900 dark:text-white">
-              Chronologie &amp; Reconstitution de l'Évolution du Projet dans le Temps
+              Chronologie &amp; Reconstitution Temporelle ({allMilestones.length} jalons)
             </h2>
           </div>
           <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">
-            Historique des jalons, décalages absorbés et trajectoire consolidée vers le Go-Live du 28 novembre 2026.
+            Trajectoire et évolution temporelle reconstruite directement à partir des pièces de votre dossier.
           </p>
         </div>
 
@@ -75,17 +75,17 @@ export const TimelineView: React.FC<TimelineViewProps> = ({
         <div className="flex items-center gap-2">
           <button
             onClick={() => setFilter('all')}
-            className={`px-3 py-1.5 rounded-xl text-xs font-semibold transition-colors ${
+            className={`px-3 py-1.5 rounded-xl text-xs font-semibold transition-colors cursor-pointer ${
               filter === 'all'
                 ? 'bg-blue-600 text-white font-bold'
                 : 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300'
             }`}
           >
-            Tous les jalons ({analysis.milestones.length})
+            Tous ({allMilestones.length})
           </button>
           <button
             onClick={() => setFilter('completed')}
-            className={`px-3 py-1.5 rounded-xl text-xs font-semibold transition-colors ${
+            className={`px-3 py-1.5 rounded-xl text-xs font-semibold transition-colors cursor-pointer ${
               filter === 'completed'
                 ? 'bg-emerald-600 text-white font-bold'
                 : 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300'
@@ -95,7 +95,7 @@ export const TimelineView: React.FC<TimelineViewProps> = ({
           </button>
           <button
             onClick={() => setFilter('pending')}
-            className={`px-3 py-1.5 rounded-xl text-xs font-semibold transition-colors ${
+            className={`px-3 py-1.5 rounded-xl text-xs font-semibold transition-colors cursor-pointer ${
               filter === 'pending'
                 ? 'bg-sky-600 text-white font-bold'
                 : 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300'
@@ -111,61 +111,67 @@ export const TimelineView: React.FC<TimelineViewProps> = ({
         <div className="absolute left-10 top-8 bottom-8 w-0.5 bg-slate-200 dark:bg-slate-800" />
 
         <div className="space-y-8 relative">
-          {milestones.map((m, idx) => {
-            return (
-              <div key={idx} className="flex items-start gap-6 group">
-                {/* Milestone Node */}
-                <div className="shrink-0 z-10">
-                  {getStatusIcon(m.status)}
-                </div>
+          {milestones.length === 0 ? (
+            <div className="p-8 text-center text-xs text-slate-500">
+              Aucun jalon ne correspond à ce filtre.
+            </div>
+          ) : (
+            milestones.map((m, idx) => {
+              return (
+                <div key={idx} className="flex items-start gap-6 group">
+                  {/* Milestone Node */}
+                  <div className="shrink-0 z-10">
+                    {getStatusIcon(m.status)}
+                  </div>
 
-                {/* Milestone Details Card */}
-                <div className="flex-1 p-5 rounded-2xl bg-slate-50 dark:bg-slate-800/60 border border-slate-200/80 dark:border-slate-700/80 group-hover:border-blue-400 transition-colors">
-                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
-                    <div className="flex items-center gap-2">
-                      <span className="font-mono text-xs font-bold text-blue-600 dark:text-blue-400 bg-blue-100 dark:bg-blue-950 px-2 py-0.5 rounded-md">
-                        {m.date}
+                  {/* Milestone Details Card */}
+                  <div className="flex-1 p-5 rounded-2xl bg-slate-50 dark:bg-slate-800/60 border border-slate-200/80 dark:border-slate-700/80 group-hover:border-blue-400 transition-colors">
+                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                      <div className="flex items-center gap-2">
+                        <span className="font-mono text-xs font-bold text-blue-600 dark:text-blue-400 bg-blue-100 dark:bg-blue-950 px-2 py-0.5 rounded-md">
+                          {m.date}
+                        </span>
+                        <h3 className="text-sm font-bold text-slate-900 dark:text-white">
+                          {m.title}
+                        </h3>
+                      </div>
+
+                      <span className={`px-2.5 py-0.5 rounded-full text-[11px] font-bold uppercase self-start sm:self-auto ${
+                        m.status === 'completed'
+                          ? 'bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300'
+                          : m.status === 'on_track'
+                          ? 'bg-blue-100 text-blue-800 dark:bg-blue-950 dark:text-blue-300'
+                          : m.status === 'at_risk'
+                          ? 'bg-amber-100 text-amber-800 dark:bg-amber-950 dark:text-amber-300'
+                          : 'bg-slate-200 text-slate-700 dark:bg-slate-700 dark:text-slate-300'
+                      }`}>
+                        {m.status === 'completed' ? 'Complété' : m.status === 'on_track' ? 'En cours' : m.status === 'at_risk' ? 'Sous surveillance' : 'Planifié'}
                       </span>
-                      <h3 className="text-sm font-bold text-slate-900 dark:text-white">
-                        {m.title}
-                      </h3>
                     </div>
 
-                    <span className={`px-2.5 py-0.5 rounded-full text-[11px] font-bold uppercase self-start sm:self-auto ${
-                      m.status === 'completed'
-                        ? 'bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300'
-                        : m.status === 'on_track'
-                        ? 'bg-blue-100 text-blue-800 dark:bg-blue-950 dark:text-blue-300'
-                        : m.status === 'at_risk'
-                        ? 'bg-amber-100 text-amber-800 dark:bg-amber-950 dark:text-amber-300'
-                        : 'bg-slate-200 text-slate-700 dark:bg-slate-700 dark:text-slate-300'
-                    }`}>
-                      {m.status === 'completed' ? 'Complété' : m.status === 'on_track' ? 'En cours' : m.status === 'at_risk' ? 'Sous surveillance' : 'Planifié'}
-                    </span>
-                  </div>
+                    {m.initialDate && m.initialDate !== m.date && (
+                      <div className="mt-2 text-xs text-amber-700 dark:text-amber-300 bg-amber-50 dark:bg-amber-950/40 p-2 rounded-lg border border-amber-200 dark:border-amber-800/50">
+                        ⚠️ <strong>Historique de report :</strong> Initialement prévu au <strong>{m.initialDate}</strong>, réajusté lors des comités de gouvernance.
+                      </div>
+                    )}
 
-                  {m.initialDate && m.initialDate !== m.date && (
-                    <div className="mt-2 text-xs text-amber-700 dark:text-amber-300 bg-amber-50 dark:bg-amber-950/40 p-2 rounded-lg border border-amber-200 dark:border-amber-800/50">
-                      ⚠️ <strong>Historique de report :</strong> Initialement prévu au <strong>{m.initialDate}</strong>, décalé suite aux arbitrages du comité de direction (Transcript M04).
-                    </div>
-                  )}
+                    {m.notes && (
+                      <p className="text-xs text-slate-600 dark:text-slate-300 mt-2">
+                        {m.notes}
+                      </p>
+                    )}
 
-                  {m.notes && (
-                    <p className="text-xs text-slate-600 dark:text-slate-300 mt-2">
-                      {m.notes}
-                    </p>
-                  )}
-
-                  <div className="mt-3 pt-3 border-t border-slate-200 dark:border-slate-700/60 flex items-center justify-between text-xs text-slate-500">
-                    <div className="flex items-center gap-1.5">
-                      <User className="w-3.5 h-3.5 text-slate-400" />
-                      <span>Responsable : <strong className="text-slate-700 dark:text-slate-300">{m.owner}</strong></span>
+                    <div className="mt-3 pt-3 border-t border-slate-200 dark:border-slate-700/60 flex items-center justify-between text-xs text-slate-500">
+                      <div className="flex items-center gap-1.5">
+                        <User className="w-3.5 h-3.5 text-slate-400" />
+                        <span>Responsable : <strong className="text-slate-700 dark:text-slate-300">{m.owner}</strong></span>
+                      </div>
                     </div>
                   </div>
                 </div>
-              </div>
-            );
-          })}
+              );
+            })
+          )}
         </div>
       </div>
     </div>

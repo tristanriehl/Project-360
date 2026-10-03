@@ -6,6 +6,7 @@ import { fileURLToPath } from 'url';
 import { INITIAL_NOVA_ANALYSIS, SAMPLE_DOCUMENTS_NOVA, SAMPLE_DOCUMENTS_ORION } from './src/data/sampleProjects.js';
 import { ProjectAnalysis, ProjectDocument } from './src/types/project.js';
 import { synthesizeDatasetLocally } from './src/utils/datasetSynthesizer.js';
+import { normalizeAnalysis } from './src/utils/normalizeAnalysis.js';
 
 dotenv.config();
 
@@ -17,8 +18,11 @@ const PORT = Number(process.env.PORT) || 3000;
 
 app.use(express.json({ limit: '50mb' }));
 
-// Initialize GoogleGenAI client
-const apiKey = process.env.GEMINI_API_KEY || '';
+// LLM Mode: 'gemini' | 'ollama' | 'local'
+const forceLocalLLM = process.env.USE_LOCAL_LLM === 'true' || process.env.LLM_PROVIDER === 'ollama' || process.env.LLM_PROVIDER === 'local';
+const rawApiKey = process.env.GEMINI_API_KEY || '';
+const apiKey = forceLocalLLM ? '' : rawApiKey;
+
 const ai = new GoogleGenAI({
   apiKey: apiKey,
   httpOptions: {
@@ -28,8 +32,125 @@ const ai = new GoogleGenAI({
   },
 });
 
-// Ultra-lightweight, token-efficient model
-const GEMINI_LIGHT_MODEL = 'gemini-3.1-flash-lite';
+// Standard fast & accurate model for structured JSON synthesis and RAG
+const GEMINI_MODEL = 'gemini-2.5-flash';
+
+// Local LLM Configuration (Ollama, LM Studio, etc.)
+const OLLAMA_HOST = process.env.OLLAMA_HOST || 'http://localhost:11434';
+const OLLAMA_MODEL = process.env.OLLAMA_MODEL || 'llama3.2';
+
+/**
+ * Calls local LLM via Ollama or OpenAI-compatible local server
+ */
+async function callLocalLLM(prompt: string, systemPrompt?: string, jsonMode = false): Promise<string | null> {
+  try {
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 30000);
+
+    // 1. Try Ollama native endpoint (/api/generate)
+    try {
+      const res = await fetch(`${OLLAMA_HOST}/api/generate`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          model: OLLAMA_MODEL,
+          prompt: prompt,
+          system: systemPrompt,
+          format: jsonMode ? 'json' : undefined,
+          stream: false,
+        }),
+        signal: controller.signal
+      });
+
+      if (res.ok) {
+        clearTimeout(timeout);
+        const data: any = await res.json();
+        if (data.response) return data.response.trim();
+      }
+    } catch (ollamaErr) {
+      // Ignore and try OpenAI compatible endpoint
+    }
+
+    // 2. Try OpenAI-compatible chat endpoint (LM Studio / Ollama / LocalAI on /v1/chat/completions)
+    try {
+      const v1Host = OLLAMA_HOST.endsWith('/v1') ? OLLAMA_HOST : `${OLLAMA_HOST}/v1`;
+      const resV1 = await fetch(`${v1Host}/chat/completions`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          model: OLLAMA_MODEL,
+          messages: [
+            ...(systemPrompt ? [{ role: 'system', content: systemPrompt }] : []),
+            { role: 'user', content: prompt }
+          ],
+          temperature: 0.2,
+        }),
+        signal: controller.signal
+      });
+
+      if (resV1.ok) {
+        clearTimeout(timeout);
+        const data: any = await resV1.json();
+        const content = data?.choices?.[0]?.message?.content;
+        if (content) return content.trim();
+      }
+    } catch (v1Err) {
+      // Ignore
+    }
+
+    clearTimeout(timeout);
+    return null;
+  } catch (err) {
+    return null;
+  }
+}
+
+/**
+ * Fallback keyword search for local document citations
+ */
+function localKeywordSearch(query: string, docs: ProjectDocument[]) {
+  const queryTerms = query.toLowerCase().split(/\s+/).filter((w: string) => w.length > 2);
+  let bestDoc = docs[0];
+  const bestMatches: { docName: string; quote: string; relevance: string }[] = [];
+  let bestScore = -1;
+
+  docs.forEach(doc => {
+    let score = 0;
+    const text = doc.content.toLowerCase();
+    queryTerms.forEach((term: string) => {
+      if (text.includes(term)) score += 2;
+      if (doc.name.toLowerCase().includes(term)) score += 3;
+    });
+    if (score > bestScore) {
+      bestScore = score;
+      bestDoc = doc;
+    }
+
+    const lines = doc.content.split(/\r?\n/);
+    for (const line of lines) {
+      const cleanLine = line.trim();
+      if (queryTerms.some((t: string) => cleanLine.toLowerCase().includes(t)) && cleanLine.length > 20) {
+        if (bestMatches.length < 4 && !bestMatches.some(m => m.quote === cleanLine)) {
+          bestMatches.push({
+            docName: doc.name,
+            quote: cleanLine.slice(0, 240),
+            relevance: `Extrait pertinent trouvé dans ${doc.name} (${doc.date})`
+          });
+        }
+      }
+    }
+  });
+
+  if (bestMatches.length === 0 && bestDoc) {
+    bestMatches.push({
+      docName: bestDoc.name,
+      quote: bestDoc.summary || bestDoc.content.slice(0, 200),
+      relevance: 'Pièce documentaire indexée dans la mémoire opérationnelle'
+    });
+  }
+
+  return { bestDoc, bestMatches };
+}
 
 const createEmptyAnalysis = (name = 'Awaiting Folder Import'): ProjectAnalysis => ({
   projectId: 'AWAITING-DATASET',
@@ -88,6 +209,165 @@ app.post('/api/reset-project', (req: Request, res: Response) => {
   });
 });
 
+// Shared JSON schema for ProjectAnalysis
+const PROJECT_ANALYSIS_SCHEMA = {
+  type: Type.OBJECT,
+  properties: {
+    projectId: { type: Type.STRING },
+    projectName: { type: Type.STRING },
+    lastUpdated: { type: Type.STRING },
+    status: { type: Type.STRING },
+    statusLabel: { type: Type.STRING },
+    healthScore: { type: Type.NUMBER },
+    executiveSummary: { type: Type.STRING },
+    activeBlockersCount: { type: Type.NUMBER },
+    decisionsCount: { type: Type.NUMBER },
+    upcomingDeadlinesCount: { type: Type.NUMBER },
+    keyStakeholders: {
+      type: Type.ARRAY,
+      items: {
+        type: Type.OBJECT,
+        properties: {
+          name: { type: Type.STRING },
+          role: { type: Type.STRING },
+          organization: { type: Type.STRING },
+          influence: { type: Type.STRING }
+        },
+        required: ['name', 'role', 'organization', 'influence']
+      }
+    },
+    milestones: {
+      type: Type.ARRAY,
+      items: {
+        type: Type.OBJECT,
+        properties: {
+          id: { type: Type.STRING },
+          title: { type: Type.STRING },
+          date: { type: Type.STRING },
+          status: { type: Type.STRING },
+          initialDate: { type: Type.STRING },
+          owner: { type: Type.STRING },
+          notes: { type: Type.STRING }
+        },
+        required: ['title', 'date', 'status', 'owner']
+      }
+    },
+    decisions: {
+      type: Type.ARRAY,
+      items: {
+        type: Type.OBJECT,
+        properties: {
+          id: { type: Type.STRING },
+          title: { type: Type.STRING },
+          date: { type: Type.STRING },
+          owner: { type: Type.STRING },
+          rationale: { type: Type.STRING },
+          impact: { type: Type.STRING },
+          status: { type: Type.STRING },
+          sourceDocName: { type: Type.STRING },
+          evidenceQuote: { type: Type.STRING }
+        },
+        required: ['id', 'title', 'date', 'owner', 'rationale', 'impact', 'status', 'sourceDocName', 'evidenceQuote']
+      }
+    },
+    risks: {
+      type: Type.ARRAY,
+      items: {
+        type: Type.OBJECT,
+        properties: {
+          id: { type: Type.STRING },
+          title: { type: Type.STRING },
+          severity: { type: Type.STRING },
+          category: { type: Type.STRING },
+          identifiedDate: { type: Type.STRING },
+          owner: { type: Type.STRING },
+          mitigation: { type: Type.STRING },
+          status: { type: Type.STRING },
+          sourceDocName: { type: Type.STRING }
+        },
+        required: ['id', 'title', 'severity', 'category', 'owner', 'mitigation', 'status']
+      }
+    },
+    actions: {
+      type: Type.ARRAY,
+      items: {
+        type: Type.OBJECT,
+        properties: {
+          id: { type: Type.STRING },
+          title: { type: Type.STRING },
+          assignee: { type: Type.STRING },
+          deadline: { type: Type.STRING },
+          priority: { type: Type.STRING },
+          status: { type: Type.STRING },
+          sourceRationale: { type: Type.STRING }
+        },
+        required: ['id', 'title', 'assignee', 'deadline', 'priority', 'status', 'sourceRationale']
+      }
+    },
+    contradictions: {
+      type: Type.ARRAY,
+      items: {
+        type: Type.OBJECT,
+        properties: {
+          id: { type: Type.STRING },
+          topic: { type: Type.STRING },
+          issue: { type: Type.STRING },
+          sourceA: {
+            type: Type.OBJECT,
+            properties: {
+              docName: { type: Type.STRING },
+              statement: { type: Type.STRING },
+              date: { type: Type.STRING }
+            },
+            required: ['docName', 'statement', 'date']
+          },
+          sourceB: {
+            type: Type.OBJECT,
+            properties: {
+              docName: { type: Type.STRING },
+              statement: { type: Type.STRING },
+              date: { type: Type.STRING }
+            },
+            required: ['docName', 'statement', 'date']
+          },
+          validStatus: { type: Type.STRING },
+          recommendation: { type: Type.STRING }
+        },
+        required: ['id', 'topic', 'issue', 'sourceA', 'sourceB', 'validStatus', 'recommendation']
+      }
+    },
+    financials: {
+      type: Type.OBJECT,
+      properties: {
+        contractTotal: { type: Type.STRING },
+        invoicedTotal: { type: Type.STRING },
+        paidTotal: { type: Type.STRING },
+        disputedAmount: { type: Type.STRING },
+        notes: { type: Type.STRING }
+      },
+      required: ['contractTotal', 'invoicedTotal', 'paidTotal', 'disputedAmount', 'notes']
+    },
+    topics: {
+      type: Type.ARRAY,
+      items: {
+        type: Type.OBJECT,
+        properties: {
+          name: { type: Type.STRING },
+          description: { type: Type.STRING },
+          documentCount: { type: Type.NUMBER },
+          health: { type: Type.STRING }
+        },
+        required: ['name', 'description', 'documentCount', 'health']
+      }
+    }
+  },
+  required: [
+    'projectName', 'status', 'statusLabel', 'healthScore',
+    'executiveSummary', 'milestones', 'decisions', 'risks', 'actions',
+    'contradictions', 'financials', 'topics', 'keyStakeholders'
+  ]
+};
+
 // 3.5. POST /api/upload-dataset - Upload user folder documents and run RAG synthesis
 app.post('/api/upload-dataset', async (req: Request, res: Response) => {
   try {
@@ -98,16 +378,12 @@ app.post('/api/upload-dataset', async (req: Request, res: Response) => {
 
     currentDocuments = documents;
 
-    // Generate local factual synthesis from documents
+    // Generate local factual synthesis from documents as rock-solid baseline
     const localSynthesis = synthesizeDatasetLocally(currentDocuments, folderName);
+    currentAnalysis = normalizeAnalysis(localSynthesis, folderName || 'Projet Importé');
 
-    // If no Gemini API key, use local synthesis directly
+    // If local LLM mode or no API key, return local synthesis directly
     if (!apiKey) {
-      currentAnalysis = {
-        ...localSynthesis,
-        projectName: folderName || localSynthesis.projectName || 'Projet Importé',
-        lastUpdated: new Date().toLocaleDateString('fr-CA') + ' ' + new Date().toLocaleTimeString('fr-CA', { hour: '2-digit', minute: '2-digit' }),
-      };
       return res.json({
         success: true,
         project: currentAnalysis,
@@ -115,51 +391,56 @@ app.post('/api/upload-dataset', async (req: Request, res: Response) => {
       });
     }
 
-    // Call Gemini Flash Lite (gemini-3.1-flash-lite) to synthesize with minimal token consumption
-    const docsText = currentDocuments.map(d => `--- PIÈCE [${d.name}] (${d.categoryLabel} - Date: ${d.date}) ---
-Auteur: ${d.author || 'Inconnu'}
-Contenu:
-${d.content.slice(0, 1800)}`).join('\n\n');
+    // Call Gemini to synthesize with structured schema
+    const docsText = currentDocuments.map(d => `--- PIÈCE [${d.name}] (${d.categoryLabel} - Date: ${d.date} - Auteur: ${d.author || 'N/A'}) ---
+Résumé : ${d.summary}
+Contenu :
+${d.content.slice(0, 3000)}`).join('\n\n');
 
-    const prompt = `Tu es l'analyste principal du système 'Projet 360 - Cerveau du Projet'.
+    const prompt = `Tu es l'analyste principal du système 'Projet 360 - Le Cerveau du Projet'.
 L'utilisateur vient d'importer son dossier de projet contenant ${currentDocuments.length} pièces documentaires réelles :
 ${docsText}
 
 MISSION CRITIQUE :
-Toutes tes extractions, citations, décisions, contradictions et jalons doivent provenir EXCLUSIVEMENT et STRICTEMENT de ces documents réels ci-dessus. Ne crée aucune fausse information ni hallucination.
-
-Produis une réponse JSON structurée :
-1. projectName : Nom du projet d'après les documents ou "${folderName || 'Projet Importé'}"
-2. status ('on_track', 'at_risk', 'delayed') et healthScore (0-100)
-3. executiveSummary : Synthèse fidèle basée sur les faits réels des documents
-4. milestones : Jalons et dates trouvés dans les documents
-5. decisions : Décisions réelles avec citation textuelle et nom exact du document source
-6. risks : Risques réels avec niveau de sévérité et source
-7. actions : Actions identifiées
-8. contradictions : Divergences, contestations ou discordances entre documents
-9. financials : Données financières mentionnées dans les pièces
-10. topics : Thématiques principales`;
-
-    const response = await ai.models.generateContent({
-      model: GEMINI_LIGHT_MODEL,
-      contents: prompt,
-      config: {
-        responseMimeType: 'application/json',
-      }
-    });
+Toutes tes extractions, citations, décisions, contradictions, risques et jalons doivent provenir EXCLUSIVEMENT et STRICTEMENT de ces documents réels ci-dessus. Ne crée aucune fausse information.`;
 
     try {
+      const response = await ai.models.generateContent({
+        model: GEMINI_MODEL,
+        contents: prompt,
+        config: {
+          responseMimeType: 'application/json',
+          responseSchema: PROJECT_ANALYSIS_SCHEMA
+        }
+      });
+
       const parsed = JSON.parse(response.text || '{}');
-      if (parsed.projectName || parsed.executiveSummary) {
-        currentAnalysis = {
-          ...currentAnalysis,
+      if (parsed && typeof parsed === 'object') {
+        const mergedDecisions = (Array.isArray(parsed.decisions) && parsed.decisions.length > 0) ? parsed.decisions : localSynthesis.decisions;
+        const mergedMilestones = (Array.isArray(parsed.milestones) && parsed.milestones.length > 0) ? parsed.milestones : localSynthesis.milestones;
+        const mergedRisks = (Array.isArray(parsed.risks) && parsed.risks.length > 0) ? parsed.risks : localSynthesis.risks;
+        const mergedActions = (Array.isArray(parsed.actions) && parsed.actions.length > 0) ? parsed.actions : localSynthesis.actions;
+        const mergedContradictions = (Array.isArray(parsed.contradictions) && parsed.contradictions.length > 0) ? parsed.contradictions : localSynthesis.contradictions;
+        const mergedStakeholders = (Array.isArray(parsed.keyStakeholders) && parsed.keyStakeholders.length > 0) ? parsed.keyStakeholders : localSynthesis.keyStakeholders;
+        const mergedTopics = (Array.isArray(parsed.topics) && parsed.topics.length > 0) ? parsed.topics : localSynthesis.topics;
+
+        currentAnalysis = normalizeAnalysis({
+          ...localSynthesis,
           ...parsed,
-          projectName: folderName || parsed.projectName || 'Projet Importé',
+          decisions: mergedDecisions,
+          milestones: mergedMilestones,
+          risks: mergedRisks,
+          actions: mergedActions,
+          contradictions: mergedContradictions,
+          keyStakeholders: mergedStakeholders,
+          topics: mergedTopics,
+          projectName: folderName || parsed.projectName || localSynthesis.projectName || 'Projet Importé',
           lastUpdated: new Date().toLocaleDateString('fr-CA') + ' ' + new Date().toLocaleTimeString('fr-CA', { hour: '2-digit', minute: '2-digit' }),
-        };
+        }, folderName || 'Projet Importé');
       }
-    } catch (e) {
-      console.warn('Could not parse Gemini JSON response for dataset upload, keeping current structure:', e);
+    } catch (aiErr: any) {
+      console.warn('Gemini synthesis quota or error, using local synthesis baseline:', aiErr?.message || aiErr);
+      currentAnalysis = normalizeAnalysis(localSynthesis, folderName || 'Projet Importé');
     }
 
     res.json({
@@ -177,10 +458,11 @@ Produis une réponse JSON structurée :
 app.post('/api/analyze-project', async (req: Request, res: Response) => {
   try {
     const docsToAnalyze: ProjectDocument[] = req.body.documents || currentDocuments;
+    const localSynthesis = synthesizeDatasetLocally(docsToAnalyze, currentAnalysis.projectName);
     
-    // If no API key or empty docs, synthesize locally from documents
+    // If local LLM mode or no API key, return local synthesis
     if (!apiKey) {
-      currentAnalysis = synthesizeDatasetLocally(docsToAnalyze, currentAnalysis.projectName);
+      currentAnalysis = normalizeAnalysis(localSynthesis, currentAnalysis.projectName);
       return res.json({
         success: true,
         analysis: currentAnalysis,
@@ -188,198 +470,53 @@ app.post('/api/analyze-project', async (req: Request, res: Response) => {
       });
     }
 
-    const docsText = docsToAnalyze.map(d => `--- DOCUMENT [${d.name}] (${d.categoryLabel} - Date: ${d.date}) ---
-Auteur: ${d.author || 'Inconnu'}
-Contenu:
-${d.content.slice(0, 1800)}`).join('\n\n');
+    const docsText = docsToAnalyze.map(d => `--- DOCUMENT [${d.name}] (${d.categoryLabel} - Date: ${d.date} - Auteur: ${d.author || 'N/A'}) ---
+Résumé : ${d.summary}
+Contenu :
+${d.content.slice(0, 3000)}`).join('\n\n');
 
     const prompt = `Tu es l'analyste principal et moteur RAG du système 'Projet 360 - Le Cerveau du Projet'.
-Ta mission est d'analyser l'ensemble des documents d'un projet d'entreprise (courriels, comptes-rendus de réunions, tickets de bugs, contrats, finances, enregistrements d'architecture ADR, conversations Teams, notes de passation) pour construire une mémoire opérationnelle fiable et structurée.
+Ta mission est d'analyser l'ensemble des documents d'un projet pour construire une mémoire opérationnelle fiable et structurée.
 
 Voici la documentation complète du projet :
-${docsText}
+${docsText}`;
 
-Fournis une analyse JSON rigoureuse et exhaustive respectant scrupuleusement la structure demandée :
-1. Évalue l'état global ('on_track', 'at_risk', 'delayed') et un score de santé (0-100).
-2. Rédige un résumé exécutif limpide.
-3. Extrais les jalons avec statut ('completed', 'on_track', 'at_risk', 'pending'), date et initialDate si reportée.
-4. Extrais les décisions clés avec date, responsable, justification (rationale), impact, document source et citation de preuve (evidenceQuote).
-5. Extrais les risques actifs avec niveau de sévérité ('high', 'medium', 'low'), mitigation et document source.
-6. Extrais les actions prioritaires à entreprendre avec responsable, date limite, priorité ('high', 'medium', 'low') et justification.
-7. Détecte formellement toutes les contradictions ou informations périmées (ex: dates différentes dans la charte vs plan v3, facturation de demandes non signées, désaccords de périmètre) en précisant quelle source est ACTUELLEMENT VALIDE et la recommandation opérationnelle.
-8. Synthétise les données financières (montant contrat, facturé, payé, montant en litige/contesté).
-9. Identifie les parties prenantes clés et leur rôle.
-10. Catégorise les thématiques principales (topics) avec leur état de santé.`;
-
-    const response = await ai.models.generateContent({
-      model: GEMINI_LIGHT_MODEL,
-      contents: prompt,
-      config: {
-        responseMimeType: 'application/json',
-        responseSchema: {
-          type: Type.OBJECT,
-          properties: {
-            projectId: { type: Type.STRING },
-            projectName: { type: Type.STRING },
-            lastUpdated: { type: Type.STRING },
-            status: { type: Type.STRING },
-            statusLabel: { type: Type.STRING },
-            healthScore: { type: Type.NUMBER },
-            executiveSummary: { type: Type.STRING },
-            activeBlockersCount: { type: Type.NUMBER },
-            decisionsCount: { type: Type.NUMBER },
-            upcomingDeadlinesCount: { type: Type.NUMBER },
-            keyStakeholders: {
-              type: Type.ARRAY,
-              items: {
-                type: Type.OBJECT,
-                properties: {
-                  name: { type: Type.STRING },
-                  role: { type: Type.STRING },
-                  organization: { type: Type.STRING },
-                  influence: { type: Type.STRING }
-                },
-                required: ['name', 'role', 'organization', 'influence']
-              }
-            },
-            milestones: {
-              type: Type.ARRAY,
-              items: {
-                type: Type.OBJECT,
-                properties: {
-                  title: { type: Type.STRING },
-                  date: { type: Type.STRING },
-                  status: { type: Type.STRING },
-                  initialDate: { type: Type.STRING },
-                  owner: { type: Type.STRING },
-                  notes: { type: Type.STRING }
-                },
-                required: ['title', 'date', 'status', 'owner']
-              }
-            },
-            decisions: {
-              type: Type.ARRAY,
-              items: {
-                type: Type.OBJECT,
-                properties: {
-                  id: { type: Type.STRING },
-                  title: { type: Type.STRING },
-                  date: { type: Type.STRING },
-                  owner: { type: Type.STRING },
-                  rationale: { type: Type.STRING },
-                  impact: { type: Type.STRING },
-                  status: { type: Type.STRING },
-                  sourceDocName: { type: Type.STRING },
-                  evidenceQuote: { type: Type.STRING }
-                },
-                required: ['id', 'title', 'date', 'owner', 'rationale', 'impact', 'status']
-              }
-            },
-            risks: {
-              type: Type.ARRAY,
-              items: {
-                type: Type.OBJECT,
-                properties: {
-                  id: { type: Type.STRING },
-                  title: { type: Type.STRING },
-                  severity: { type: Type.STRING },
-                  category: { type: Type.STRING },
-                  identifiedDate: { type: Type.STRING },
-                  owner: { type: Type.STRING },
-                  mitigation: { type: Type.STRING },
-                  status: { type: Type.STRING },
-                  sourceDocName: { type: Type.STRING }
-                },
-                required: ['id', 'title', 'severity', 'category', 'owner', 'mitigation', 'status']
-              }
-            },
-            actions: {
-              type: Type.ARRAY,
-              items: {
-                type: Type.OBJECT,
-                properties: {
-                  id: { type: Type.STRING },
-                  title: { type: Type.STRING },
-                  assignee: { type: Type.STRING },
-                  deadline: { type: Type.STRING },
-                  priority: { type: Type.STRING },
-                  status: { type: Type.STRING },
-                  sourceRationale: { type: Type.STRING }
-                },
-                required: ['id', 'title', 'assignee', 'deadline', 'priority', 'status', 'sourceRationale']
-              }
-            },
-            contradictions: {
-              type: Type.ARRAY,
-              items: {
-                type: Type.OBJECT,
-                properties: {
-                  id: { type: Type.STRING },
-                  topic: { type: Type.STRING },
-                  issue: { type: Type.STRING },
-                  sourceA: {
-                    type: Type.OBJECT,
-                    properties: {
-                      docName: { type: Type.STRING },
-                      statement: { type: Type.STRING },
-                      date: { type: Type.STRING }
-                    },
-                    required: ['docName', 'statement', 'date']
-                  },
-                  sourceB: {
-                    type: Type.OBJECT,
-                    properties: {
-                      docName: { type: Type.STRING },
-                      statement: { type: Type.STRING },
-                      date: { type: Type.STRING }
-                    },
-                    required: ['docName', 'statement', 'date']
-                  },
-                  validStatus: { type: Type.STRING },
-                  recommendation: { type: Type.STRING }
-                },
-                required: ['id', 'topic', 'issue', 'sourceA', 'sourceB', 'validStatus', 'recommendation']
-              }
-            },
-            financials: {
-              type: Type.OBJECT,
-              properties: {
-                contractTotal: { type: Type.STRING },
-                invoicedTotal: { type: Type.STRING },
-                paidTotal: { type: Type.STRING },
-                disputedAmount: { type: Type.STRING },
-                notes: { type: Type.STRING }
-              },
-              required: ['contractTotal', 'invoicedTotal', 'paidTotal', 'notes']
-            },
-            topics: {
-              type: Type.ARRAY,
-              items: {
-                type: Type.OBJECT,
-                properties: {
-                  name: { type: Type.STRING },
-                  description: { type: Type.STRING },
-                  documentCount: { type: Type.NUMBER },
-                  health: { type: Type.STRING }
-                },
-                required: ['name', 'description', 'documentCount', 'health']
-              }
-            }
-          },
-          required: [
-            'projectId', 'projectName', 'status', 'statusLabel', 'healthScore',
-            'executiveSummary', 'milestones', 'decisions', 'risks', 'actions',
-            'contradictions', 'financials', 'topics'
-          ]
+    try {
+      const response = await ai.models.generateContent({
+        model: GEMINI_MODEL,
+        contents: prompt,
+        config: {
+          responseMimeType: 'application/json',
+          responseSchema: PROJECT_ANALYSIS_SCHEMA
         }
-      }
-    });
+      });
 
-    const parsed = JSON.parse(response.text || '{}') as ProjectAnalysis;
-    currentAnalysis = {
-      ...parsed,
-      lastUpdated: new Date().toLocaleDateString('fr-CA') + ' ' + new Date().toLocaleTimeString('fr-CA', { hour: '2-digit', minute: '2-digit' }),
-    };
+      const parsed = JSON.parse(response.text || '{}') as ProjectAnalysis;
+      const mergedDecisions = (Array.isArray(parsed.decisions) && parsed.decisions.length > 0) ? parsed.decisions : localSynthesis.decisions;
+      const mergedMilestones = (Array.isArray(parsed.milestones) && parsed.milestones.length > 0) ? parsed.milestones : localSynthesis.milestones;
+      const mergedRisks = (Array.isArray(parsed.risks) && parsed.risks.length > 0) ? parsed.risks : localSynthesis.risks;
+      const mergedActions = (Array.isArray(parsed.actions) && parsed.actions.length > 0) ? parsed.actions : localSynthesis.actions;
+      const mergedContradictions = (Array.isArray(parsed.contradictions) && parsed.contradictions.length > 0) ? parsed.contradictions : localSynthesis.contradictions;
+      const mergedStakeholders = (Array.isArray(parsed.keyStakeholders) && parsed.keyStakeholders.length > 0) ? parsed.keyStakeholders : localSynthesis.keyStakeholders;
+      const mergedTopics = (Array.isArray(parsed.topics) && parsed.topics.length > 0) ? parsed.topics : localSynthesis.topics;
+
+      currentAnalysis = normalizeAnalysis({
+        ...localSynthesis,
+        ...parsed,
+        decisions: mergedDecisions,
+        milestones: mergedMilestones,
+        risks: mergedRisks,
+        actions: mergedActions,
+        contradictions: mergedContradictions,
+        keyStakeholders: mergedStakeholders,
+        topics: mergedTopics,
+        lastUpdated: new Date().toLocaleDateString('fr-CA') + ' ' + new Date().toLocaleTimeString('fr-CA', { hour: '2-digit', minute: '2-digit' }),
+      }, currentAnalysis.projectName);
+    } catch (aiErr: any) {
+      console.warn('AI analysis quota/error, keeping local synthesis baseline:', aiErr?.message || aiErr);
+      currentAnalysis = normalizeAnalysis(localSynthesis, currentAnalysis.projectName);
+    }
+
     currentDocuments = docsToAnalyze;
 
     res.json({
@@ -411,67 +548,61 @@ app.post('/api/chat-rag', async (req: Request, res: Response) => {
       });
     }
 
-    if (!apiKey) {
-      // Find most relevant documents by keyword matching
-      const queryTerms = question.toLowerCase().split(/\s+/).filter((w: string) => w.length > 2);
-      let bestDoc = currentDocuments[0];
-      const bestMatches: { docName: string; quote: string; relevance: string }[] = [];
-      let bestScore = -1;
+    // Function to handle local RAG response via Ollama or smart keyword citation
+    const handleLocalRagResponse = async () => {
+      const { bestDoc, bestMatches } = localKeywordSearch(question, currentDocuments);
 
-      currentDocuments.forEach(doc => {
-        let score = 0;
-        const text = doc.content.toLowerCase();
-        queryTerms.forEach((term: string) => {
-          if (text.includes(term)) score += 2;
-          if (doc.name.toLowerCase().includes(term)) score += 3;
-        });
-        if (score > bestScore) {
-          bestScore = score;
-          bestDoc = doc;
-        }
+      // Try local Ollama / LM Studio if running
+      const ollamaContext = currentDocuments.slice(0, 15).map(d => `[DOC: ${d.name} (${d.date} - ${d.author || 'N/A'})]\n${d.content.slice(0, 1500)}`).join('\n\n');
+      const ollamaPrompt = `Tu es le Cerveau Opérationnel du projet. Réponds à la question de l'utilisateur strictement d'après les documents ci-dessous en citant le document source et en fournissant des puces claires.
 
-        const lines = doc.content.split('\n');
-        for (const line of lines) {
-          if (queryTerms.some((t: string) => line.toLowerCase().includes(t)) && line.trim().length > 20) {
-            if (bestMatches.length < 3 && !bestMatches.some(m => m.quote === line.trim())) {
-              bestMatches.push({
-                docName: doc.name,
-                quote: line.trim().slice(0, 200),
-                relevance: `Extrait pertinent trouvé dans ${doc.name}`
-              });
-            }
-          }
-        }
-      });
+Documents du projet :
+${ollamaContext}
 
-      if (bestMatches.length === 0 && bestDoc) {
-        bestMatches.push({
-          docName: bestDoc.name,
-          quote: bestDoc.summary,
-          relevance: 'Pièce documentaire indexée'
-        });
+Question : "${question}"`;
+
+      const ollamaReply = await callLocalLLM(ollamaPrompt);
+      if (ollamaReply && ollamaReply.trim().length > 20) {
+        return {
+          answer: ollamaReply,
+          citations: bestMatches.slice(0, 3),
+          suggestedFollowUps: [
+            "Quelles sont les décisions actées ?",
+            "Quelles contradictions sont identifiées ?",
+            "Quels sont les jalons de livraison ?"
+          ]
+        };
       }
 
-      return res.json({
-        answer: `D'après l'analyse locale de vos ${currentDocuments.length} pièces documentaires :\n\n- **Document source identifié :** ${bestDoc.name} (${bestDoc.date})\n- **Élément clé :** "${bestMatches[0]?.quote || bestDoc.summary}"\n\n*(Mémoire opérationnelle indexée sur vos fichiers réels. Pour une synthèse générative en direct, configurez GEMINI_API_KEY dans votre fichier .env).*`,
+      // Keyword RAG fallback if Ollama server is not running
+      return {
+        answer: `D'après l'analyse locale de vos ${currentDocuments.length} pièces documentaires :\n\n- **Document source identifié :** ${bestDoc.name} (${bestDoc.date})\n- **Élément factuel relevé :** "${bestMatches[0]?.quote || bestDoc.summary}"\n\n*(Réponse générée par le moteur RAG local. Pour activer l'inférence générative locale complète, lancez Ollama avec \`ollama run ${OLLAMA_MODEL}\`).*`,
         citations: bestMatches,
         suggestedFollowUps: [
           "Quelles sont les décisions actées ?",
           "Quelles contradictions sont identifiées ?",
           "Quels sont les jalons de livraison ?"
         ]
-      });
+      };
+    };
+
+    // If local LLM mode requested or no Gemini key, use local RAG directly
+    if (!apiKey) {
+      const localResult = await handleLocalRagResponse();
+      return res.json(localResult);
     }
 
-    // Build context with all documents and analysis
+    // Build context for Gemini
     const contextDocs = currentDocuments.map(d => `[DOC: ${d.name} | Catégorie: ${d.categoryLabel} | Date: ${d.date} | Auteur: ${d.author || 'N/A'}]
-${d.content}`).join('\n\n');
+Résumé: ${d.summary}
+Contenu:
+${d.content.slice(0, 2500)}`).join('\n\n');
 
     const systemPrompt = `Tu es le "Cerveau du Projet" - un assistant RAG expert en mémoire opérationnelle de projet.
-Ton rôle est de répondre avec une précision absolue aux questions des membres de l'équipe, des gestionnaires et de la direction en t'appuyant STRICTEMENT sur les documents fournis.
+Ton rôle est de répondre avec une précision absolue aux questions en t'appuyant STRICTEMENT sur les documents fournis.
 
 Règles fondamentales :
-1. Fais toujours la distinction entre une information HISTORIQUE (périmée ou obsolète, ex: date initiale de la charte v1) et une information ACTUELLEMENT VALIDE (ex: décision du copil ou plan v3).
+1. Fais toujours la distinction entre une information HISTORIQUE (périmée ou obsolète) et une information ACTUELLEMENT VALIDE.
 2. Identifie explicitement les contradictions lorsqu'il y en a et explique pourquoi une version prime sur une autre.
 3. Justifie TOUTES tes affirmations en citant le nom exact du ou des documents sources et en fournissant un extrait textuel (citation exacte).
 4. Si l'information est absente ou incertaine, dis-le clairement sans inventer.
@@ -494,40 +625,47 @@ Réponds au format JSON avec le schéma suivant :
 - citations: Tableau d'extraits sources [{ docName: string, quote: string, relevance: string }]
 - suggestedFollowUps: 3 questions pertinentes que l'utilisateur pourrait poser ensuite.`;
 
-    const response = await ai.models.generateContent({
-      model: GEMINI_LIGHT_MODEL,
-      contents: userPrompt,
-      config: {
-        systemInstruction: systemPrompt,
-        responseMimeType: 'application/json',
-        responseSchema: {
-          type: Type.OBJECT,
-          properties: {
-            answer: { type: Type.STRING },
-            citations: {
-              type: Type.ARRAY,
-              items: {
-                type: Type.OBJECT,
-                properties: {
-                  docName: { type: Type.STRING },
-                  quote: { type: Type.STRING },
-                  relevance: { type: Type.STRING }
-                },
-                required: ['docName', 'quote', 'relevance']
+    try {
+      const response = await ai.models.generateContent({
+        model: GEMINI_MODEL,
+        contents: userPrompt,
+        config: {
+          systemInstruction: systemPrompt,
+          responseMimeType: 'application/json',
+          responseSchema: {
+            type: Type.OBJECT,
+            properties: {
+              answer: { type: Type.STRING },
+              citations: {
+                type: Type.ARRAY,
+                items: {
+                  type: Type.OBJECT,
+                  properties: {
+                    docName: { type: Type.STRING },
+                    quote: { type: Type.STRING },
+                    relevance: { type: Type.STRING }
+                  },
+                  required: ['docName', 'quote', 'relevance']
+                }
+              },
+              suggestedFollowUps: {
+                type: Type.ARRAY,
+                items: { type: Type.STRING }
               }
             },
-            suggestedFollowUps: {
-              type: Type.ARRAY,
-              items: { type: Type.STRING }
-            }
-          },
-          required: ['answer', 'citations', 'suggestedFollowUps']
+            required: ['answer', 'citations', 'suggestedFollowUps']
+          }
         }
-      }
-    });
+      });
 
-    const parsed = JSON.parse(response.text || '{}');
-    res.json(parsed);
+      const parsed = JSON.parse(response.text || '{}');
+      res.json(parsed);
+    } catch (cloudErr: any) {
+      console.warn('Gemini API call hit quota/error (falling back to local RAG/Ollama):', cloudErr?.message || cloudErr);
+      // Automatic graceful fallback to local Ollama / local RAG
+      const localFallback = await handleLocalRagResponse();
+      res.json(localFallback);
+    }
   } catch (err: any) {
     console.error('Error in /api/chat-rag:', err);
     res.status(500).json({ error: err.message || 'Erreur lors de la requête RAG' });
@@ -560,37 +698,37 @@ app.post('/api/new-event', async (req: Request, res: Response) => {
     // Add to active document database
     currentDocuments.unshift(newDoc);
 
+    const localImpactFallback = {
+      eventId: newDocId,
+      eventDescription: description || content,
+      timestamp: new Date().toISOString(),
+      whatChanged: title || "Nouvel événement enregistré dans le référentiel documentaire.",
+      affectedElements: [
+        {
+          element: "Gouvernance & Jalons",
+          previousState: currentAnalysis.statusLabel,
+          newState: "Révision requise suite au nouvel événement",
+          reason: `Document reçu : ${newDoc.name}`
+        }
+      ],
+      recommendedActions: [
+        {
+          action: `Évaluer l'impact opérationnel de : ${title || newDoc.name}`,
+          priority: "urgent",
+          assignee: author || "Chef de projet"
+        }
+      ],
+      updatedProjectStatus: "at_risk"
+    };
+
     if (!apiKey) {
       return res.json({
         success: true,
         newDocument: newDoc,
-        impactAnalysis: {
-          eventId: newDocId,
-          eventDescription: description || content,
-          timestamp: new Date().toISOString(),
-          whatChanged: "Nouvel événement enregistré dans le référentiel documentaire.",
-          affectedElements: [
-            {
-              element: "Gouvernance & Jalons",
-              previousState: "Planning initial",
-              newState: "Révision requise suite au nouvel événement",
-              reason: "Informations reçues modifiant le contexte opérationnel"
-            }
-          ],
-          recommendedActions: [
-            {
-              action: "Convoquer un comité d'urgence pour évaluer l'impact.",
-              priority: "urgent",
-              assignee: "Mathieu Gagnon (CP)"
-            }
-          ],
-          updatedProjectStatus: "at_risk"
-        },
+        impactAnalysis: localImpactFallback,
         updatedProject: currentAnalysis
       });
     }
-
-    const contextDocs = currentDocuments.map(d => `[DOC: ${d.name} (${d.date})] ${d.summary}\n${d.content.slice(0, 500)}`).join('\n\n');
 
     const prompt = `Un nouvel événement vient de survenir dans le projet !
 Voici l'événement ou le document reçu :
@@ -600,8 +738,8 @@ Contenu :
 "${content || description}"
 
 Voici l'état actuel de la mémoire du projet avant cet événement :
+- Projet : ${currentAnalysis.projectName}
 - Statut actuel : ${currentAnalysis.statusLabel}
-- Date Go-Live actuelle : 28 novembre 2026
 - Décisions clés : ${currentAnalysis.decisions.map(d => d.title).join('; ')}
 - Risques majeurs : ${currentAnalysis.risks.map(r => r.title).join('; ')}
 - Éléments financiers : ${JSON.stringify(currentAnalysis.financials)}
@@ -613,80 +751,89 @@ Tu dois répondre formellement aux 3 questions imposées par le Défi 360 :
 
 Fournis également l'impact sur le statut global du projet ('on_track', 'at_risk', 'delayed') et une mise à jour des éléments clés.`;
 
-    const response = await ai.models.generateContent({
-      model: GEMINI_LIGHT_MODEL,
-      contents: prompt,
-      config: {
-        responseMimeType: 'application/json',
-        responseSchema: {
-          type: Type.OBJECT,
-          properties: {
-            eventId: { type: Type.STRING },
-            eventDescription: { type: Type.STRING },
-            timestamp: { type: Type.STRING },
-            whatChanged: { type: Type.STRING },
-            affectedElements: {
-              type: Type.ARRAY,
-              items: {
-                type: Type.OBJECT,
-                properties: {
-                  element: { type: Type.STRING },
-                  previousState: { type: Type.STRING },
-                  newState: { type: Type.STRING },
-                  reason: { type: Type.STRING }
-                },
-                required: ['element', 'previousState', 'newState', 'reason']
-              }
+    try {
+      const response = await ai.models.generateContent({
+        model: GEMINI_MODEL,
+        contents: prompt,
+        config: {
+          responseMimeType: 'application/json',
+          responseSchema: {
+            type: Type.OBJECT,
+            properties: {
+              eventId: { type: Type.STRING },
+              eventDescription: { type: Type.STRING },
+              timestamp: { type: Type.STRING },
+              whatChanged: { type: Type.STRING },
+              affectedElements: {
+                type: Type.ARRAY,
+                items: {
+                  type: Type.OBJECT,
+                  properties: {
+                    element: { type: Type.STRING },
+                    previousState: { type: Type.STRING },
+                    newState: { type: Type.STRING },
+                    reason: { type: Type.STRING }
+                  },
+                  required: ['element', 'previousState', 'newState', 'reason']
+                }
+              },
+              recommendedActions: {
+                type: Type.ARRAY,
+                items: {
+                  type: Type.OBJECT,
+                  properties: {
+                    action: { type: Type.STRING },
+                    priority: { type: Type.STRING },
+                    assignee: { type: Type.STRING }
+                  },
+                  required: ['action', 'priority', 'assignee']
+                }
+              },
+              updatedProjectStatus: { type: Type.STRING },
+              summaryForDashboard: { type: Type.STRING }
             },
-            recommendedActions: {
-              type: Type.ARRAY,
-              items: {
-                type: Type.OBJECT,
-                properties: {
-                  action: { type: Type.STRING },
-                  priority: { type: Type.STRING },
-                  assignee: { type: Type.STRING }
-                },
-                required: ['action', 'priority', 'assignee']
-              }
-            },
-            updatedProjectStatus: { type: Type.STRING },
-            summaryForDashboard: { type: Type.STRING }
-          },
-          required: ['whatChanged', 'affectedElements', 'recommendedActions', 'updatedProjectStatus']
+            required: ['whatChanged', 'affectedElements', 'recommendedActions', 'updatedProjectStatus']
+          }
         }
+      });
+
+      const impact = JSON.parse(response.text || '{}');
+      
+      if (impact.updatedProjectStatus) {
+        currentAnalysis.status = impact.updatedProjectStatus as any;
+        currentAnalysis.statusLabel = impact.updatedProjectStatus === 'delayed' ? 'En retard critique' : impact.updatedProjectStatus === 'at_risk' ? 'Sous tension / Actions requises' : 'En bonne voie';
       }
-    });
 
-    const impact = JSON.parse(response.text || '{}');
-    
-    // Dynamically update currentAnalysis based on impact
-    if (impact.updatedProjectStatus) {
-      currentAnalysis.status = impact.updatedProjectStatus as any;
-      currentAnalysis.statusLabel = impact.updatedProjectStatus === 'delayed' ? 'En retard critique' : impact.updatedProjectStatus === 'at_risk' ? 'Sous tension / Actions requises' : 'En bonne voie';
+      if (impact.recommendedActions && impact.recommendedActions.length > 0) {
+        const newActions = impact.recommendedActions.map((a: any, idx: number) => ({
+          id: `ACT-EVT-${Date.now().toString().slice(-3)}-${idx}`,
+          title: a.action,
+          assignee: a.assignee || author || 'Chef de projet',
+          deadline: 'Sous 48 heures',
+          priority: a.priority || 'high',
+          status: 'todo' as const,
+          sourceRationale: `Déclenché suite à l'événement : ${newDoc.name}`
+        }));
+        currentAnalysis.actions = [...newActions, ...currentAnalysis.actions];
+      }
+
+      currentAnalysis.lastUpdated = new Date().toLocaleDateString('fr-CA') + ' ' + new Date().toLocaleTimeString('fr-CA', { hour: '2-digit', minute: '2-digit' });
+
+      res.json({
+        success: true,
+        newDocument: newDoc,
+        impactAnalysis: impact,
+        updatedProject: currentAnalysis
+      });
+    } catch (aiErr) {
+      console.warn('Gemini quota/error on new event, using local fallback:', aiErr);
+      res.json({
+        success: true,
+        newDocument: newDoc,
+        impactAnalysis: localImpactFallback,
+        updatedProject: currentAnalysis
+      });
     }
-
-    if (impact.recommendedActions && impact.recommendedActions.length > 0) {
-      const newActions = impact.recommendedActions.map((a: any, idx: number) => ({
-        id: `ACT-EVT-${Date.now().toString().slice(-3)}-${idx}`,
-        title: a.action,
-        assignee: a.assignee || 'Mathieu Gagnon',
-        deadline: 'Sous 48 heures',
-        priority: a.priority || 'high',
-        status: 'todo' as const,
-        sourceRationale: `Déclenché suite à l'événement : ${newDoc.name}`
-      }));
-      currentAnalysis.actions = [...newActions, ...currentAnalysis.actions];
-    }
-
-    currentAnalysis.lastUpdated = new Date().toLocaleDateString('fr-CA') + ' ' + new Date().toLocaleTimeString('fr-CA', { hour: '2-digit', minute: '2-digit' });
-
-    res.json({
-      success: true,
-      newDocument: newDoc,
-      impactAnalysis: impact,
-      updatedProject: currentAnalysis
-    });
   } catch (err: any) {
     console.error('Error in /api/new-event:', err);
     res.status(500).json({ error: err.message || 'Erreur lors du traitement de l\'événement' });
@@ -698,47 +845,50 @@ app.post('/api/generate-briefing', async (req: Request, res: Response) => {
   try {
     const { targetAudience = 'direction_generale' } = req.body;
 
+    const localBriefingFallback = {
+      title: `Briefing Exécutif - ${currentAnalysis.projectName}`,
+      date: new Date().toLocaleDateString('fr-CA'),
+      audience: targetAudience,
+      executiveSummary: currentAnalysis.executiveSummary,
+      keyMilestones: currentAnalysis.milestones,
+      criticalDecisions: currentAnalysis.decisions,
+      risksAndMitigations: currentAnalysis.risks,
+      financialStatus: currentAnalysis.financials,
+      immediateNextSteps: currentAnalysis.actions.slice(0, 3)
+    };
+
     if (!apiKey) {
-      return res.json({
-        title: "Briefing Exécutif - Projet NOVA (360°)",
-        date: new Date().toLocaleDateString('fr-CA'),
-        audience: targetAudience,
-        executiveSummary: currentAnalysis.executiveSummary,
-        keyMilestones: currentAnalysis.milestones,
-        criticalDecisions: currentAnalysis.decisions,
-        risksAndMitigations: currentAnalysis.risks,
-        financialStatus: currentAnalysis.financials,
-        immediateNextSteps: currentAnalysis.actions.slice(0, 3)
-      });
+      return res.json(localBriefingFallback);
     }
 
     const prompt = `Génère un dossier de briefing exécutif de haut niveau pour la ${targetAudience === 'direction_generale' ? 'Direction Générale et le Comité de Direction' : 'Direction de Projet et Sponsors'}.
 Base-toi sur la mémoire opérationnelle du projet ci-dessous :
 ${JSON.stringify(currentAnalysis, null, 2)}
 
-Produis un compte-rendu synthétique, orienté décision et gouvernance, incluant :
-- Titre clair et date
-- Résumé exécutif en 3 points clés
-- État d'avancement des livrables et date ferme de Go-Live
-- Analyse financière et litiges en cours de règlement
-- 3 décisions majeures prises et leurs justifications
-- Risques résiduels et plan de mitigation
-- Arbitrages demandés à la direction`;
+Documents indexés :
+${currentDocuments.map(d => `- ${d.name} (${d.categoryLabel}, ${d.date}): ${d.summary}`).join('\n')}
 
-    const response = await ai.models.generateContent({
-      model: GEMINI_LIGHT_MODEL,
-      contents: prompt,
-      config: {
-        systemInstruction: "Tu es un directeur de programme et conseiller exécutif chevronné.",
-      }
-    });
+Produis un compte-rendu synthétique, orienté décision et gouvernance.`;
 
-    res.json({
-      title: "Briefing Stratégique Exécutif - Projet NOVA",
-      date: new Date().toLocaleDateString('fr-CA'),
-      content: response.text,
-      rawAnalysis: currentAnalysis
-    });
+    try {
+      const response = await ai.models.generateContent({
+        model: GEMINI_MODEL,
+        contents: prompt,
+        config: {
+          systemInstruction: "Tu es un directeur de programme et conseiller exécutif chevronné.",
+        }
+      });
+
+      res.json({
+        title: `Briefing Stratégique Exécutif - ${currentAnalysis.projectName}`,
+        date: new Date().toLocaleDateString('fr-CA'),
+        content: response.text,
+        rawAnalysis: currentAnalysis
+      });
+    } catch (aiErr) {
+      console.warn('Briefing AI quota/error, returning structured local briefing:', aiErr);
+      res.json(localBriefingFallback);
+    }
   } catch (err: any) {
     console.error('Error in /api/generate-briefing:', err);
     res.status(500).json({ error: err.message || 'Erreur lors de la génération du briefing' });
@@ -752,7 +902,7 @@ app.post('/api/decision-dossier', async (req: Request, res: Response) => {
       const sourceDoc = currentDocuments.find(doc => doc.name.toLowerCase().includes(d.sourceDocName?.toLowerCase() || '') || doc.id === d.sourceDocId);
       return {
         ...d,
-        fullSourceExcerpt: sourceDoc ? sourceDoc.content.slice(0, 800) : 'Document source non indexé',
+        fullSourceExcerpt: sourceDoc ? sourceDoc.content.slice(0, 1000) : (d.evidenceQuote || 'Document source non indexé'),
         sourceCategory: sourceDoc?.categoryLabel || 'Général',
         verified: !!sourceDoc
       };
@@ -775,27 +925,27 @@ app.post('/api/compare-projects', async (req: Request, res: Response) => {
   try {
     const comparison = {
       projectA: {
-        name: "Projet NOVA (Plateforme Client 360)",
-        budget: "380 000 $ CAD",
+        name: currentAnalysis.projectName,
+        budget: currentAnalysis.financials.contractTotal || "380 000 $ CAD",
         status: currentAnalysis.statusLabel,
-        deliveryDate: "28 Novembre 2026",
-        keyChallenges: "Intégration API CRM, souveraineté des données Loi 25, accessibilité WCAG AA, litige facture INV-003",
-        technology: "Next.js SSR + NestJS + PostgreSQL (Canada Central)",
-        governance: "Passation CP mi-projet (Élodie -> Mathieu)"
+        deliveryDate: currentAnalysis.milestones[currentAnalysis.milestones.length - 1]?.date || "Consolidé",
+        keyChallenges: currentAnalysis.risks.map(r => r.title).slice(0, 3).join(', ') || "Suivi des jalons et conformité",
+        technology: "Architecture modulaire cloud",
+        governance: "Pilotage continu"
       },
       projectB: {
         name: "Projet ORION (Modernisation Logistique)",
         budget: "520 000 $ CAD",
-        status: "Clôturé avec succès (Fév 2026)",
-        deliveryDate: "10 Février 2026 (Respecté)",
+        status: "Clôturé avec succès",
+        deliveryDate: "Février 2026 (Respecté)",
         keyChallenges: "Tests de charge sous 5 000 capteurs IoT, standardisation bons de commande fournisseurs",
         technology: "Microservices Go + Kafka + TimescaleDB",
         governance: "Équipe stable dédiée avec chef de projet senior"
       },
       keyTakeaways: [
-        "Le projet ORION a anticipé les tests de performance dès le Sprint 2, évitant ainsi le blocage tardif PERF-501 rencontré sur NOVA.",
-        "Le cadrage contractuel des avenants (CR) sur ORION imposait une signature préalable systématique, ce qui aurait prévenu le litige sur la facture INV-003 / CR-04 de Boréal.",
-        "La gouvernance de NOVA a su faire preuve d'agilité en réalignant officiellement le Go-Live au 28 novembre sans dépasser le budget global initial de 380 000 $."
+        "L'anticipation des tests de performance en amont évite les blocages tardifs rencontrés en fin de parcours.",
+        "Le cadrage contractuel des avenants impose une validation formelle préalable pour prévenir les litiges de facturation.",
+        "La gouvernance agile permet de réaligner officiellement les jalons sans dépasser le budget global initial."
       ]
     };
 
@@ -822,7 +972,7 @@ app.post('/api/ingest-files', async (req: Request, res: Response) => {
       if (ext === 'eml' || f.name.toLowerCase().includes('courriel') || f.name.toLowerCase().includes('email')) {
         cat = 'email';
         catLabel = 'Courriel';
-      } else if (f.name.toLowerCase().includes('reunion') || f.name.toLowerCase().includes('transcript') || f.name.toLowerCase().includes('cr_')) {
+      } else if (f.name.toLowerCase().includes('reunion') || f.name.toLowerCase().includes('transcript') || f.name.toLowerCase().includes('cr_') || f.name.toLowerCase().includes('meeting')) {
         cat = 'meeting';
         catLabel = 'Compte-rendu Réunion';
       } else if (f.name.toLowerCase().includes('ticket') || f.name.match(/^[A-Z]{3,4}-\d+/)) {
@@ -834,7 +984,7 @@ app.post('/api/ingest-files', async (req: Request, res: Response) => {
       } else if (f.name.toLowerCase().includes('adr') || f.name.toLowerCase().includes('archi')) {
         cat = 'architecture';
         catLabel = 'Architecture & ADR';
-      } else if (f.name.toLowerCase().includes('teams')) {
+      } else if (f.name.toLowerCase().includes('teams') || f.name.toLowerCase().includes('slack')) {
         cat = 'teams';
         catLabel = 'Discussion Teams';
       }
@@ -855,12 +1005,15 @@ app.post('/api/ingest-files', async (req: Request, res: Response) => {
     });
 
     currentDocuments = [...newDocs, ...currentDocuments];
+    const updatedSynthesis = synthesizeDatasetLocally(currentDocuments, currentAnalysis.projectName);
+    currentAnalysis = normalizeAnalysis({ ...currentAnalysis, ...updatedSynthesis }, currentAnalysis.projectName);
 
     res.json({
       success: true,
       message: `${newDocs.length} document(s) importé(s) avec succès dans le Cerveau du Projet.`,
       addedDocuments: newDocs,
-      totalDocuments: currentDocuments.length
+      totalDocuments: currentDocuments.length,
+      updatedProject: currentAnalysis
     });
   } catch (err: any) {
     console.error('Error in /api/ingest-files:', err);

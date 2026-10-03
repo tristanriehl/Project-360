@@ -13,7 +13,8 @@ import {
   ExternalLink,
   Cpu,
   FolderUp,
-  HelpCircle
+  HelpCircle,
+  Sparkles
 } from 'lucide-react';
 import { useLanguage } from '../context/LanguageContext';
 
@@ -51,13 +52,13 @@ export const LocalDemoModal: React.FC<LocalDemoModalProps> = ({ isOpen, onClose 
     },
     {
       id: 'step3',
-      title: '3. (Optional) Configure environment variables',
-      desc: 'Create a .env file if you want live Gemini synthesis (uses lightweight gemini-3.1-flash-lite), or leave empty for offline demo mode:',
-      command: `cp .env.example .env\n\n# Open .env and add your key:\nGEMINI_API_KEY="your_api_key_here"`
+      title: '3. Configure your local LLM (Ollama / LLaMA / Mistral)',
+      desc: 'To run 100% offline with zero cloud quota limits, start Ollama and configure your .env file:',
+      command: `# In terminal:\nollama run llama3.2\n\n# In your .env file:\nUSE_LOCAL_LLM="true"\nOLLAMA_HOST="http://localhost:11434"\nOLLAMA_MODEL="llama3.2"\n# Leave GEMINI_API_KEY="" empty`
     },
     {
       id: 'step4',
-      title: '4. Start the local development server',
+      title: '4. Start the local server',
       desc: 'Starts Express backend with Vite on port 3000:',
       command: `npm run dev`
     }
@@ -76,9 +77,9 @@ export const LocalDemoModal: React.FC<LocalDemoModalProps> = ({ isOpen, onClose 
     },
     {
       id: 'step3',
-      title: '3. (Optionnel) Configurer les variables d\'environnement',
-      desc: 'Créez un fichier .env si vous souhaitez activer l\'IA en direct (utilise le modèle ultra-léger gemini-3.1-flash-lite), ou laissez vide pour le mode hors-ligne :',
-      command: `cp .env.example .env\n\n# Ouvrez .env et renseignez votre clé :\nGEMINI_API_KEY="votre_cle_api_ici"`
+      title: '3. Configurer votre LLM local (Ollama / LLaMA / Mistral)',
+      desc: 'Pour exécuter le projet 100% hors-ligne sans limite de quota, lancez Ollama et configurez votre .env :',
+      command: `# Dans votre terminal :\nollama run llama3.2\n\n# Dans votre fichier .env :\nUSE_LOCAL_LLM="true"\nOLLAMA_HOST="http://localhost:11434"\nOLLAMA_MODEL="llama3.2"\n# Laissez GEMINI_API_KEY="" vide`
     },
     {
       id: 'step4',
@@ -105,7 +106,7 @@ export const LocalDemoModal: React.FC<LocalDemoModalProps> = ({ isOpen, onClose 
                 {isEn ? 'Local Setup & Run Instructions' : 'Guide d\'Exécution en Local'}
               </h3>
               <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
-                {isEn ? 'How to run Projet 360 directly on your computer' : 'Comment exécuter Projet 360 à 100% sur votre propre machine'}
+                {isEn ? 'How to run Projet 360 with your local LLM (Ollama / LLaMA / Mistral)' : 'Comment exécuter Projet 360 avec votre LLM local (Ollama / LLaMA / Mistral)'}
               </p>
             </div>
           </div>
@@ -123,15 +124,15 @@ export const LocalDemoModal: React.FC<LocalDemoModalProps> = ({ isOpen, onClose 
           
           {/* Key Guarantee Banner */}
           <div className="p-4 rounded-2xl bg-emerald-50/80 dark:bg-emerald-950/40 border border-emerald-200 dark:border-emerald-800 flex items-start gap-3">
-            <ShieldCheck className="w-5 h-5 text-emerald-600 shrink-0 mt-0.5" />
+            <Cpu className="w-5 h-5 text-emerald-600 shrink-0 mt-0.5" />
             <div>
               <h4 className="font-bold text-emerald-950 dark:text-emerald-100">
-                {isEn ? 'Standard Full-Stack TypeScript Architecture' : 'Architecture Full-Stack TypeScript Standard'}
+                {isEn ? '100% Local Inference & Offline Memory' : 'Inférence 100% Locale & Mémoire Hors-ligne'}
               </h4>
               <p className="text-slate-600 dark:text-slate-300 mt-1 leading-relaxed">
                 {isEn 
-                  ? 'Built on Node.js, Express, React 19, TypeScript and Tailwind CSS. Runs independently on any local machine without proprietary lock-in.'
-                  : 'Développé en Node.js, Express, React 19, TypeScript et Tailwind CSS. S\'exécute de façon totalement autonome sur votre machine.'}
+                  ? 'No cloud API keys required. By setting USE_LOCAL_LLM="true" in your .env file and running Ollama (llama3.2, mistral, or qwen2.5), all RAG queries run on your local hardware with zero quota limits.'
+                  : 'Aucune clé API cloud requise. En définissant USE_LOCAL_LLM="true" dans votre fichier .env et en lançant Ollama (llama3.2, mistral, ou qwen2.5), toutes les requêtes RAG s\'exécutent sur votre machine locale sans limite de quota.'}
               </p>
             </div>
           </div>
