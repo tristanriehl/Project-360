@@ -1,6 +1,32 @@
 import { ProjectDocument } from '../types/project';
 
 /**
+ * Decodes Quoted-Printable encoding commonly found in .eml emails
+ */
+function decodeQuotedPrintable(str: string): string {
+  try {
+    // Replace soft line breaks
+    let decoded = str.replace(/=\r?\n/g, '');
+    // Decode hexadecimal bytes
+    decoded = decoded.replace(/=([0-9A-F]{2})/gi, (_, hex) => {
+      try {
+        return String.fromCharCode(parseInt(hex, 16));
+      } catch {
+        return _;
+      }
+    });
+    // Try to decode utf-8 multi-byte if needed
+    try {
+      return decodeURIComponent(escape(decoded));
+    } catch {
+      return decoded;
+    }
+  } catch {
+    return str;
+  }
+}
+
+/**
  * Parses files read from an uploaded folder or file input.
  */
 export async function parseUploadedFiles(fileList: File[] | FileList): Promise<ProjectDocument[]> {
@@ -10,8 +36,8 @@ export async function parseUploadedFiles(fileList: File[] | FileList): Promise<P
   for (let i = 0; i < files.length; i++) {
     const file = files[i];
     
-    // Ignore hidden files and system trash (like .DS_Store, Thumbs.db)
-    if (file.name.startsWith('.') || file.name === 'Thumbs.db') {
+    // Ignore hidden files and system trash (like .DS_Store, Thumbs.db, Desktop.ini)
+    if (file.name.startsWith('.') || file.name === 'Thumbs.db' || file.name === 'desktop.ini') {
       continue;
     }
 
@@ -37,35 +63,36 @@ export async function parseUploadedFiles(fileList: File[] | FileList): Promise<P
  * Reads text content from a File object.
  */
 function readFileContent(file: File): Promise<string> {
-  return new Promise((resolve, reject) => {
+  return new Promise((resolve) => {
     const reader = new FileReader();
 
     reader.onload = (event) => {
       const content = event.target?.result;
       if (typeof content === 'string') {
-        resolve(content);
+        // Decode quoted printable if it looks like an email or encoded file
+        if (file.name.endsWith('.eml') || content.includes('=3D') || content.includes('=20') || content.includes('=C3=')) {
+          resolve(decodeQuotedPrintable(content));
+        } else {
+          resolve(content);
+        }
       } else if (content instanceof ArrayBuffer) {
-        // Fallback for binary: extract printable strings
+        // Extract readable ASCII and UTF-8 text from array buffer
         const uint8Array = new Uint8Array(content);
         const decoder = new TextDecoder('utf-8', { fatal: false });
         const decoded = decoder.decode(uint8Array);
-        // Clean non-printable characters for readability
-        const cleaned = decoded.replace(/[\x00-\x08\x0B\x0C\x0E-\x1F\x7F-\x9F]/g, ' ').slice(0, 50000);
+        const cleaned = decoded.replace(/[\x00-\x08\x0B\x0C\x0E-\x1F]/g, ' ').slice(0, 100000);
         resolve(cleaned);
       } else {
         resolve(`[File ${file.name} - ${file.size} bytes]`);
       }
     };
 
-    reader.onerror = (error) => reject(error);
+    reader.onerror = () => {
+      resolve(`[Document content of ${file.name}]`);
+    };
 
-    // Read as text for text/eml/code, or arraybuffer for potential binary docs
-    const ext = file.name.split('.').pop()?.toLowerCase();
-    if (['txt', 'md', 'json', 'csv', 'eml', 'log', 'xml', 'html', 'js', 'ts', 'yaml', 'yml'].includes(ext || '')) {
-      reader.readAsText(file);
-    } else {
-      reader.readAsText(file); // Most project docs are text/eml/csv
-    }
+    // Attempt text reading first
+    reader.readAsText(file);
   });
 }
 
@@ -78,14 +105,14 @@ function processFileIntoDocument(file: File, rawContent: string, index: number):
   const lowerName = fileName.toLowerCase();
 
   let author = 'Équipe Projet';
-  let date = new Date(file.lastModified).toISOString().split('T')[0];
+  let date = new Date(file.lastModified || Date.now()).toISOString().split('T')[0];
   let category: ProjectDocument['category'] = 'project_doc';
   let categoryLabel = 'Document Projet';
   let summary = '';
   let content = rawContent;
 
   // 1. EML Email Parsing
-  if (ext === 'eml' || lowerName.includes('mail') || lowerName.startsWith('e0') || lowerName.startsWith('e1') || lowerName.startsWith('e2')) {
+  if (ext === 'eml' || ext === 'msg' || lowerName.includes('mail') || lowerName.startsWith('e0') || lowerName.startsWith('e1') || lowerName.startsWith('e2')) {
     category = 'email';
     categoryLabel = 'Courriel';
 
@@ -100,14 +127,15 @@ function processFileIntoDocument(file: File, rawContent: string, index: number):
 
     const subjectMatch = rawContent.match(/^(?:Subject|Objet)\s*:\s*([^\r\n]+)/im);
     if (subjectMatch) {
-      summary = `Courriel : ${cleanHeaderValue(subjectMatch[1])}`;
+      const subj = cleanHeaderValue(subjectMatch[1]);
+      summary = `Courriel : ${subj}`;
     }
   } 
   // 2. Meeting Notes / Transcripts
-  else if (lowerName.includes('cr_') || lowerName.includes('reunion') || lowerName.includes('meeting') || lowerName.includes('copil') || lowerName.includes('pv_')) {
+  else if (lowerName.includes('cr_') || lowerName.includes('cr-') || lowerName.includes('reunion') || lowerName.includes('meeting') || lowerName.includes('copil') || lowerName.includes('pv_') || lowerName.includes('comite')) {
     category = 'meeting';
     categoryLabel = 'Compte-rendu';
-    summary = `Compte-rendu de réunion : ${fileName.replace(/\.[^/.]+$/, '').replace(/_/g, ' ')}`;
+    summary = `Compte-rendu de réunion : ${fileName.replace(/\.[^/.]+$/, '').replace(/[_-]/g, ' ')}`;
   }
   // 3. Tickets / Bugs / JIRA
   else if (lowerName.includes('jira') || lowerName.includes('bug') || lowerName.includes('ticket') || lowerName.includes('perf-') || lowerName.includes('acc-') || lowerName.includes('incident')) {
@@ -136,55 +164,73 @@ function processFileIntoDocument(file: File, rawContent: string, index: number):
 
   // Extract author if mentioned in first 5 lines (e.g. De: / Par: / Author:)
   if (author === 'Équipe Projet') {
-    const authorLineMatch = rawContent.slice(0, 500).match(/(?:Auteur|Author|Rédacteur|Par|De)\s*[:=]\s*([^\r\n]+)/i);
+    const authorLineMatch = rawContent.slice(0, 800).match(/(?:Auteur|Author|Rédacteur|Par|De)\s*[:=]\s*([^\r\n]+)/i);
     if (authorLineMatch) {
       author = cleanHeaderValue(authorLineMatch[1]);
     }
   }
 
-  // Extract date from text if found (e.g. 2026-XX-XX or DD Month 2026)
-  const isoDateMatch = rawContent.slice(0, 1000).match(/\b(202[4-8]-[0-1][0-9]-[0-3][0-9])\b/);
-  if (isoDateMatch) {
-    date = isoDateMatch[1];
+  // Extract explicit date inside document text if present
+  const dateInTextMatch = rawContent.slice(0, 1000).match(/(?:Date|Le)\s*[:=]\s*([0-3]?[0-9][\s/-][0-1]?[0-9][\s/-]202[4-8]|\d{4}-\d{2}-\d{2}|\d{1,2}\s+[a-zéû]+\s+202[4-8])/i);
+  if (dateInTextMatch) {
+    const parsedDate = tryParseDate(dateInTextMatch[1]);
+    if (parsedDate) date = parsedDate;
   }
 
-  // Fallback summary if empty
   if (!summary) {
-    const firstLine = rawContent.trim().split('\n')[0]?.slice(0, 120);
-    summary = firstLine || `Document : ${fileName}`;
+    // Generate a clean 1-line summary from the first readable non-empty line
+    const firstLine = rawContent
+      .split('\n')
+      .map(l => l.trim())
+      .filter(l => l.length > 10 && !l.startsWith('From:') && !l.startsWith('De:') && !l.startsWith('Date:') && !l.startsWith('Subject:'))[0];
+    
+    summary = firstLine ? firstLine.slice(0, 140) : `Document ${fileName}`;
   }
-
-  // Tags extraction
-  const tags: string[] = [categoryLabel];
-  if (ext) tags.push(ext.toUpperCase());
-  if (lowerName.includes('v1') || lowerName.includes('v2') || lowerName.includes('v3')) tags.push('Versionné');
-  if (lowerName.includes('urgent') || lowerName.includes('critique')) tags.push('Prioritaire');
 
   return {
-    id: `DOC-${String(index).padStart(2, '0')}`,
+    id: `doc-${index}-${fileName.replace(/[^a-zA-Z0-9]/g, '_')}`,
     name: fileName,
     category,
     categoryLabel,
     date,
     author,
     summary,
-    content: rawContent || `[Fichier ${fileName} vide ou illisible]`,
-    tags,
-    fileType: ext,
+    content,
+    tags: [categoryLabel, ext.toUpperCase()],
+    fileType: ext.toUpperCase(),
     relevanceStatus: 'valid'
   };
 }
 
 function cleanHeaderValue(val: string): string {
-  return val.replace(/<[^>]+>/g, '').replace(/["]/g, '').trim();
+  return val
+    .replace(/^["'\s]+|["'\s]+$/g, '')
+    .replace(/<[^>]+>/g, '') // remove email angles <user@domain.com>
+    .trim();
 }
 
 function tryParseDate(dateStr: string): string | null {
   try {
     const d = new Date(dateStr);
-    if (!isNaN(d.getTime())) {
+    if (!isNaN(d.getTime()) && d.getFullYear() > 2000 && d.getFullYear() < 2050) {
       return d.toISOString().split('T')[0];
     }
-  } catch (e) {}
+  } catch {}
+
+  // Parse french dates like "15 septembre 2026"
+  const frenchMonths: Record<string, string> = {
+    'janvier': '01', 'fevrier': '02', 'février': '02', 'mars': '03', 'avril': '04',
+    'mai': '05', 'juin': '06', 'juillet': '07', 'aout': '08', 'août': '08',
+    'septembre': '09', 'octobre': '10', 'novembre': '11', 'decembre': '12', 'décembre': '12'
+  };
+
+  const match = dateStr.match(/(\d{1,2})\s+([a-zéû]+)\s+(\d{4})/i);
+  if (match) {
+    const day = match[1].padStart(2, '0');
+    const month = frenchMonths[match[2].toLowerCase()];
+    const year = match[3];
+    if (month) return `${year}-${month}-${day}`;
+  }
+
   return null;
 }

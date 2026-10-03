@@ -5,6 +5,7 @@ import path from 'path';
 import { fileURLToPath } from 'url';
 import { INITIAL_NOVA_ANALYSIS, SAMPLE_DOCUMENTS_NOVA, SAMPLE_DOCUMENTS_ORION } from './src/data/sampleProjects.js';
 import { ProjectAnalysis, ProjectDocument } from './src/types/project.js';
+import { synthesizeDatasetLocally } from './src/utils/datasetSynthesizer.js';
 
 dotenv.config();
 
@@ -97,15 +98,15 @@ app.post('/api/upload-dataset', async (req: Request, res: Response) => {
 
     currentDocuments = documents;
 
-    // If no Gemini API key, initialize a clean analysis and return
+    // Generate local factual synthesis from documents
+    const localSynthesis = synthesizeDatasetLocally(currentDocuments, folderName);
+
+    // If no Gemini API key, use local synthesis directly
     if (!apiKey) {
       currentAnalysis = {
-        ...createEmptyAnalysis(folderName || 'Projet Importé'),
-        status: 'on_track',
-        statusLabel: 'Sous Contrôle',
-        healthScore: 82,
+        ...localSynthesis,
+        projectName: folderName || localSynthesis.projectName || 'Projet Importé',
         lastUpdated: new Date().toLocaleDateString('fr-CA') + ' ' + new Date().toLocaleTimeString('fr-CA', { hour: '2-digit', minute: '2-digit' }),
-        executiveSummary: `Dossier analysé avec succès. ${currentDocuments.length} pièces documentaires réelles chargées en mémoire opérationnelle.`
       };
       return res.json({
         success: true,
@@ -177,12 +178,13 @@ app.post('/api/analyze-project', async (req: Request, res: Response) => {
   try {
     const docsToAnalyze: ProjectDocument[] = req.body.documents || currentDocuments;
     
-    // If no API key or empty docs, return fallback
+    // If no API key or empty docs, synthesize locally from documents
     if (!apiKey) {
+      currentAnalysis = synthesizeDatasetLocally(docsToAnalyze, currentAnalysis.projectName);
       return res.json({
         success: true,
         analysis: currentAnalysis,
-        warning: 'Clé API Gemini non configurée dans l\'environnement, données de synthèse initiales retournées.'
+        warning: 'Synthèse locale exécutée.'
       });
     }
 
@@ -410,16 +412,49 @@ app.post('/api/chat-rag', async (req: Request, res: Response) => {
     }
 
     if (!apiKey) {
-      const firstDoc = currentDocuments[0];
-      return res.json({
-        answer: `L'assistant RAG a indexé vos ${currentDocuments.length} documents réels (mode local). Pour les réponses génératives en direct avec Gemini Flash, veuillez configurer GEMINI_API_KEY.`,
-        citations: firstDoc ? [
-          {
-            docName: firstDoc.name,
-            quote: firstDoc.summary,
-            relevance: 'Extrait de votre dossier importé'
+      // Find most relevant documents by keyword matching
+      const queryTerms = question.toLowerCase().split(/\s+/).filter((w: string) => w.length > 2);
+      let bestDoc = currentDocuments[0];
+      const bestMatches: { docName: string; quote: string; relevance: string }[] = [];
+      let bestScore = -1;
+
+      currentDocuments.forEach(doc => {
+        let score = 0;
+        const text = doc.content.toLowerCase();
+        queryTerms.forEach((term: string) => {
+          if (text.includes(term)) score += 2;
+          if (doc.name.toLowerCase().includes(term)) score += 3;
+        });
+        if (score > bestScore) {
+          bestScore = score;
+          bestDoc = doc;
+        }
+
+        const lines = doc.content.split('\n');
+        for (const line of lines) {
+          if (queryTerms.some((t: string) => line.toLowerCase().includes(t)) && line.trim().length > 20) {
+            if (bestMatches.length < 3 && !bestMatches.some(m => m.quote === line.trim())) {
+              bestMatches.push({
+                docName: doc.name,
+                quote: line.trim().slice(0, 200),
+                relevance: `Extrait pertinent trouvé dans ${doc.name}`
+              });
+            }
           }
-        ] : [],
+        }
+      });
+
+      if (bestMatches.length === 0 && bestDoc) {
+        bestMatches.push({
+          docName: bestDoc.name,
+          quote: bestDoc.summary,
+          relevance: 'Pièce documentaire indexée'
+        });
+      }
+
+      return res.json({
+        answer: `D'après l'analyse locale de vos ${currentDocuments.length} pièces documentaires :\n\n- **Document source identifié :** ${bestDoc.name} (${bestDoc.date})\n- **Élément clé :** "${bestMatches[0]?.quote || bestDoc.summary}"\n\n*(Mémoire opérationnelle indexée sur vos fichiers réels. Pour une synthèse générative en direct, configurez GEMINI_API_KEY dans votre fichier .env).*`,
+        citations: bestMatches,
         suggestedFollowUps: [
           "Quelles sont les décisions actées ?",
           "Quelles contradictions sont identifiées ?",
