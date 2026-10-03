@@ -8,11 +8,6 @@ import { ProjectAnalysis, ProjectDocument } from './src/types/project.js';
 import { synthesizeDatasetLocally } from './src/utils/datasetSynthesizer.js';
 import { normalizeAnalysis } from './src/utils/normalizeAnalysis.js';
 import { processFileIntoDocument, parseEmlContent } from './src/utils/folderParser.js';
-import { cleanUtfString, sanitizeObjectUtf } from './src/utils/cleanUtf.js';
-import * as pdfParseModule from 'pdf-parse';
-import * as XLSX from 'xlsx';
-
-const pdfParse = (pdfParseModule as any).default || pdfParseModule;
 
 dotenv.config();
 
@@ -141,14 +136,14 @@ function localKeywordSearch(query: string, docs: ProjectDocument[]) {
 
     const lines = (doc.content || '').split(/\r?\n/);
     for (const line of lines) {
-      const cleanLine = cleanUtfString(line.trim());
+      const cleanLine = line.trim();
       if (cleanLine.startsWith('---') || cleanLine.startsWith('===')) continue;
       if (queryTerms.some((t: string) => cleanLine.toLowerCase().includes(t)) && cleanLine.length > 15) {
         if (bestMatches.length < 5 && !bestMatches.some(m => m.quote === cleanLine)) {
           bestMatches.push({
-            docName: cleanUtfString(doc.name),
-            quote: cleanUtfString(cleanLine.slice(0, 260)),
-            relevance: cleanUtfString(`Extrait pertinent (${doc.categoryLabel}) - ${doc.name} (${doc.date})`)
+            docName: doc.name,
+            quote: cleanLine.slice(0, 260),
+            relevance: `Extrait pertinent (${doc.categoryLabel}) - ${doc.name} (${doc.date})`
           });
         }
       }
@@ -157,8 +152,8 @@ function localKeywordSearch(query: string, docs: ProjectDocument[]) {
 
   if (bestMatches.length === 0 && bestDoc) {
     bestMatches.push({
-      docName: cleanUtfString(bestDoc.name),
-      quote: cleanUtfString(bestDoc.summary || bestDoc.content.slice(0, 200)),
+      docName: bestDoc.name,
+      quote: bestDoc.summary || bestDoc.content.slice(0, 200),
       relevance: 'Pièce documentaire indexée dans la mémoire opérationnelle'
     });
   }
@@ -678,12 +673,12 @@ Réponds au format JSON avec le schéma suivant :
       });
 
       const parsed = JSON.parse(response.text || '{}');
-      res.json(sanitizeObjectUtf(parsed));
+      res.json(parsed);
     } catch (cloudErr: any) {
       console.warn('Gemini API call hit quota/error (falling back to local RAG/Ollama):', cloudErr?.message || cloudErr);
       // Automatic graceful fallback to local Ollama / local RAG
       const localFallback = await handleLocalRagResponse();
-      res.json(sanitizeObjectUtf(localFallback));
+      res.json(localFallback);
     }
   } catch (err: any) {
     console.error('Error in /api/chat-rag:', err);
@@ -1008,92 +1003,6 @@ app.post('/api/ingest-files', async (req: Request, res: Response) => {
   } catch (err: any) {
     console.error('Error in /api/ingest-files:', err);
     res.status(500).json({ error: err.message });
-  }
-});
-
-// 11. POST /api/parse-pdf - Server-side PDF extraction
-app.post('/api/parse-pdf', async (req: Request, res: Response) => {
-  try {
-    const { base64Data, fileName } = req.body;
-    if (!base64Data) {
-      return res.status(400).json({ error: 'Aucune donnée PDF transmise.' });
-    }
-
-    const cleanB64 = base64Data.replace(/^data:application\/pdf;base64,/, '');
-    const buffer = Buffer.from(cleanB64, 'base64');
-    const pdfData = await pdfParse(buffer);
-
-    const extractedText = cleanUtfString(pdfData.text || '');
-    if (extractedText && extractedText.trim().length > 10) {
-      return res.json({
-        success: true,
-        text: `--- DOCUMENT PDF : ${fileName || 'Document'} (${pdfData.numpages || 1} pages) ---\n\n${extractedText.trim()}`,
-        pagesCount: pdfData.numpages
-      });
-    }
-
-    res.json({
-      success: true,
-      text: `--- DOCUMENT PDF : ${fileName || 'Document'} ---\n\n[Fichier PDF : ${fileName || 'Document'}. Aucun texte lisible directement n'a été extrait du fichier PDF.]`
-    });
-  } catch (err: any) {
-    console.error('Error in /api/parse-pdf:', err);
-    res.status(500).json({ error: err.message || 'Erreur d\'extraction du PDF' });
-  }
-});
-
-// 12. POST /api/scan-image - Multimodal OCR Vision & Image Scanning (PNG, JPG, WebP)
-app.post('/api/scan-image', async (req: Request, res: Response) => {
-  try {
-    const { base64Data, mimeType = 'image/png', fileName = 'Capture_Image.png' } = req.body;
-    if (!base64Data) {
-      return res.status(400).json({ error: 'Aucune donnée image fournie.' });
-    }
-
-    const cleanB64 = base64Data.replace(/^data:image\/[a-zA-Z]+;base64,/, '');
-
-    if (apiKey) {
-      try {
-        const response = await ai.models.generateContent({
-          model: GEMINI_MODEL,
-          contents: [
-            {
-              inlineData: {
-                mimeType: mimeType,
-                data: cleanB64
-              }
-            },
-            `Tu es un moteur de numérisation OCR et d'analyse visuelle haute précision pour la mémoire opérationnelle du projet.
-Examine attentivement l'image fournie (${fileName}).
-INSTRUCTIONS :
-1. Retranscris intégralement et fidèlement TOUT le texte visible dans l'image (mots, chiffres, en-têtes, dates, montants, billets, commentaires).
-2. S'il s'agit d'un schéma, organigramme, diagramme ou architecture, décris en détail la structure des composants, les connexions et les flux.
-3. S'il s'agit d'une capture d'écran (Courriel, Ticket JIRA, Teams, Facture, Tableau), résume les personnes concernées, les décisions et les montants.
-Réponds en français sous forme de document Markdown propre, clair et structuré.`
-          ]
-        });
-
-        const textResult = response.text || '';
-        if (textResult && textResult.trim().length > 10) {
-          return res.json({
-            success: true,
-            text: `--- NUMÉRISATION OCR & SCAN VISUEL : ${fileName} ---\n\n${cleanUtfString(textResult.trim())}`,
-            isOcr: true
-          });
-        }
-      } catch (geminiVisionErr: any) {
-        console.warn('Gemini vision API error or quota limit:', geminiVisionErr?.message || geminiVisionErr);
-      }
-    }
-
-    res.json({
-      success: true,
-      text: `--- CAPTURE VISUELLE & SCHÉMA : ${fileName} ---\n\n[Scan visuel : Fichier image ${fileName}. Pour activer l'analyse OCR automatique et la retranscription des schémas, configurez la clé Gemini API.]`,
-      isOcr: false
-    });
-  } catch (err: any) {
-    console.error('Error in /api/scan-image:', err);
-    res.status(500).json({ error: err.message || 'Erreur lors du traitement de l\'image' });
   }
 });
 

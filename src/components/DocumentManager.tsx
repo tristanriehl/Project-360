@@ -163,7 +163,7 @@ export const DocumentManager: React.FC<DocumentManagerProps> = ({
               multiple
               onChange={handleFileUpload}
               className="hidden"
-              accept=".txt,.pdf,.eml,.md,.csv,.json,.xlsx,.xls,.png,.jpg,.jpeg,.webp,.docx,.pptx"
+              accept=".txt,.pdf,.eml,.md,.csv,.json,.xlsx,.docx,.pptx"
             />
           </label>
 

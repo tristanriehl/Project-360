@@ -17,7 +17,6 @@ import {
   X
 } from 'lucide-react';
 import { NewEventImpact, ProjectAnalysis, ProjectDocument } from '../types/project';
-import { readFileContent } from '../utils/folderParser';
 
 interface NewEventSimulatorProps {
   analysis: ProjectAnalysis;
@@ -95,12 +94,13 @@ Action requise : Mise à niveau immédiate de la version v4.2.1 vers v5.0.0 et r
     setUploadedFileName(null);
   };
 
-  const handleProcessFile = async (file: File) => {
+  const handleProcessFile = (file: File) => {
     if (!file) return;
     setUploadedFileName(`${file.name} (${(file.size / 1024).toFixed(1)} Ko)`);
 
-    try {
-      const text = await readFileContent(file);
+    const reader = new FileReader();
+    reader.onload = (e) => {
+      const text = (e.target?.result as string) || '';
       setContent(text);
 
       // Auto-derive clean title if empty or generic
@@ -121,9 +121,8 @@ Action requise : Mise à niveau immédiate de la version v4.2.1 vers v5.0.0 et r
       } else {
         setCategory('project_doc');
       }
-    } catch (fileErr) {
-      console.warn('File reading error:', fileErr);
-    }
+    };
+    reader.readAsText(file);
   };
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {

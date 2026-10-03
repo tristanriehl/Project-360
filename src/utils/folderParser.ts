@@ -1,6 +1,4 @@
-import * as XLSX from 'xlsx';
 import { ProjectDocument } from '../types/project';
-import { cleanUtfString } from './cleanUtf';
 
 /**
  * Decodes RFC 2047 MIME encoded words (e.g. =?UTF-8?B?...?= or =?UTF-8?Q?...?= or =?ISO-8859-1?Q?...?=)
@@ -156,7 +154,7 @@ export function stripHtmlToText(html: string): string {
 }
 
 /**
- * Extract MIME parts recursively for emails
+ * Extract MIME parts recursively
  */
 interface MimePart {
   contentType: string;
@@ -226,7 +224,7 @@ function extractAllMimeParts(body: string, rootBoundary?: string): MimePart[] {
 }
 
 /**
- * Comprehensive Parser for .eml files
+ * Comprehensive Parser for .eml files extracting Headers (From, To, Date, Subject, CC) and Clean Body
  */
 export function parseEmlContent(rawEml: string): {
   author: string;
@@ -249,14 +247,18 @@ export function parseEmlContent(rawEml: string): {
     };
   }
 
+  // Normalize line endings
   const normalized = rawEml.replace(/\r\n/g, '\n').replace(/\r/g, '\n');
 
+  // Split headers and body at the first double newline
   const headerBodySplit = normalized.indexOf('\n\n');
   const rawHeaders = headerBodySplit !== -1 ? normalized.slice(0, headerBodySplit) : normalized;
   const rawBody = headerBodySplit !== -1 ? normalized.slice(headerBodySplit + 2) : '';
 
+  // Unfold headers (multi-line RFC 2822 headers)
   const unfoldedHeaders = rawHeaders.replace(/\n[ \t]+/g, ' ');
 
+  // Extract Header fields
   let from = '';
   let to = '';
   let cc = '';
@@ -293,11 +295,14 @@ export function parseEmlContent(rawEml: string): {
     if (cteMatch && !contentTransferEncoding) contentTransferEncoding = cteMatch[1].trim().toLowerCase();
   });
 
+  // Extract clean date
   const parsedDate = tryParseDate(dateStr) || new Date().toISOString().split('T')[0];
 
+  // Parse Body (Handle Multipart, Base64, Quoted-Printable, and HTML)
   let extractedBody = '';
   const attachments: string[] = [];
 
+  // Check for multipart boundary
   const boundaryMatch = contentType.match(/boundary=["']?([^"';\r\n]+)["']?/i) || unfoldedHeaders.match(/boundary=["']?([^"';\r\n]+)["']?/i);
 
   if (boundaryMatch && boundaryMatch[1]) {
@@ -337,6 +342,7 @@ export function parseEmlContent(rawEml: string): {
     extractedBody = plainTextPart || htmlTextPart || '';
   }
 
+  // If no multipart found or extraction was empty, decode single part
   if (!extractedBody) {
     let singleBody = rawBody;
 
@@ -353,8 +359,10 @@ export function parseEmlContent(rawEml: string): {
     extractedBody = singleBody.trim();
   }
 
+  // Remove any remaining raw Base64 blocks that might have leaked from inline images or attachments
   extractedBody = extractedBody.replace(/[A-Za-z0-9+/=]{120,}/g, '[Contenu binaire ou pièce jointe omis]').trim();
 
+  // Construct structured text representation for AI indexing and display
   const headerLines: string[] = [];
   if (from) headerLines.push(`De : ${from}`);
   if (to) headerLines.push(`À : ${to}`);
@@ -376,42 +384,6 @@ export function parseEmlContent(rawEml: string): {
     formattedContent,
     attachments
   };
-}
-
-/**
- * Parses XLSX / XLS / CSV spreadsheet buffer into structured text
- */
-export function parseSpreadsheetBuffer(arrayBuffer: ArrayBuffer, fileName: string): string {
-  try {
-    const workbook = XLSX.read(new Uint8Array(arrayBuffer), { type: 'array' });
-    const sheetSections: string[] = [];
-
-    for (const sheetName of workbook.SheetNames) {
-      const sheet = workbook.Sheets[sheetName];
-      if (!sheet) continue;
-
-      // Extract sheet as CSV string with clear cell separators
-      const csvData = XLSX.utils.sheet_to_csv(sheet, { FS: ' | ' });
-      if (csvData && csvData.trim()) {
-        const cleanLines = csvData
-          .split('\n')
-          .map(l => l.trim())
-          .filter(l => l.length > 0 && !l.replace(/\|/g, '').trim().length === false);
-
-        if (cleanLines.length > 0) {
-          sheetSections.push(`=== FEUILLE : ${sheetName} ===\n${cleanLines.join('\n')}`);
-        }
-      }
-    }
-
-    if (sheetSections.length > 0) {
-      return `--- DONNÉES FINANCIÈRES & TABLEAU EXCEL : ${fileName} ---\n\n${sheetSections.join('\n\n')}`;
-    }
-  } catch (err) {
-    console.warn(`Could not parse spreadsheet ${fileName}:`, err);
-  }
-
-  return `[Tableau de données Excel ${fileName} - Métadonnées financières enregistrées]`;
 }
 
 /**
@@ -448,123 +420,29 @@ export async function parseUploadedFiles(fileList: File[] | FileList): Promise<P
 }
 
 /**
- * Reads content from a File object based on its extension (.xlsx, .pdf, .png, .jpg, text/eml)
+ * Reads text content from a File object.
  */
 function readFileContent(file: File): Promise<string> {
-  const fileName = file.name;
-  const ext = fileName.split('.').pop()?.toLowerCase() || '';
-
   return new Promise((resolve) => {
-    // 1. Spreadsheet (.xlsx, .xls, .csv, .ods)
-    if (['xlsx', 'xls', 'csv', 'ods', 'tsv'].includes(ext)) {
-      const reader = new FileReader();
-      reader.onload = (e) => {
-        const buffer = e.target?.result as ArrayBuffer;
-        if (buffer) {
-          const parsed = parseSpreadsheetBuffer(buffer, fileName);
-          resolve(parsed);
-        } else {
-          resolve(`[Tableau Excel ${fileName}]`);
-        }
-      };
-      reader.onerror = () => resolve(`[Tableau Excel ${fileName}]`);
-      reader.readAsArrayBuffer(file);
-      return;
-    }
-
-    // 2. Image Files (.png, .jpg, .jpeg, .webp) -> Multimodal Vision & OCR scan
-    if (['png', 'jpg', 'jpeg', 'webp', 'bmp', 'gif'].includes(ext)) {
-      const reader = new FileReader();
-      reader.onload = async (e) => {
-        const dataUrl = e.target?.result as string;
-        if (dataUrl) {
-          try {
-            const mimeType = file.type || `image/${ext === 'jpg' ? 'jpeg' : ext}`;
-            const res = await fetch('/api/scan-image', {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({
-                base64Data: dataUrl,
-                mimeType,
-                fileName
-              })
-            });
-
-            if (res.ok) {
-              const data = await res.json();
-              if (data.text) {
-                resolve(data.text);
-                return;
-              }
-            }
-          } catch (err) {
-            console.warn(`Vision OCR API call failed for ${fileName}:`, err);
-          }
-
-          resolve(`--- CAPTURE VISUELLE & SCHÉMA : ${fileName} ---\n\n[Scan d'image : ${fileName} (${Math.round(file.size / 1024)} Ko) - Capture graphique/schéma indexée dans le Cerveau du Projet]`);
-        } else {
-          resolve(`[Capture Image ${fileName}]`);
-        }
-      };
-      reader.onerror = () => resolve(`[Capture Image ${fileName}]`);
-      reader.readAsDataURL(file);
-      return;
-    }
-
-    // 3. PDF Files (.pdf) -> Server PDF text parser
-    if (ext === 'pdf') {
-      const reader = new FileReader();
-      reader.onload = async (e) => {
-        const dataUrl = e.target?.result as string;
-        if (dataUrl) {
-          try {
-            const base64Data = dataUrl.split(',')[1] || dataUrl;
-            const res = await fetch('/api/parse-pdf', {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({
-                base64Data,
-                fileName
-              })
-            });
-
-            if (res.ok) {
-              const data = await res.json();
-              if (data.text) {
-                resolve(data.text);
-                return;
-              }
-            }
-          } catch (err) {
-            console.warn(`PDF parse API call failed for ${fileName}:`, err);
-          }
-        }
-        resolve(`--- DOCUMENT PDF : ${fileName} ---\n\n[Document PDF : ${fileName} (${Math.round(file.size / 1024)} Ko) - Métadonnées enregistrées]`);
-      };
-      reader.onerror = () => resolve(`[Document PDF ${fileName}]`);
-      reader.readAsDataURL(file);
-      return;
-    }
-
-    // 4. Standard Text / Markdown / Code / EML files
     const reader = new FileReader();
 
     reader.onload = (event) => {
       const content = event.target?.result;
       if (typeof content === 'string') {
-        resolve(cleanUtfString(content));
+        resolve(content);
       } else if (content instanceof ArrayBuffer) {
         const uint8Array = new Uint8Array(content);
         const decoder = new TextDecoder('utf-8', { fatal: false });
         const decoded = decoder.decode(uint8Array);
-        resolve(cleanUtfString(decoded.replace(/[\x00-\x08\x0B\x0C\x0E-\x1F]/g, ' ').slice(0, 200000)));
+        const cleaned = decoded.replace(/[\x00-\x08\x0B\x0C\x0E-\x1F]/g, ' ').slice(0, 200000);
+        resolve(cleaned);
       } else {
-        resolve(`[Fichier ${fileName} - ${file.size} octets]`);
+        resolve(`[Fichier ${file.name} - ${file.size} octets]`);
       }
     };
 
     reader.onerror = () => {
-      resolve(`[Contenu du document ${fileName}]`);
+      resolve(`[Contenu du document ${file.name}]`);
     };
 
     reader.readAsText(file);
@@ -586,7 +464,7 @@ export function processFileIntoDocument(file: { name: string; lastModified?: num
   let summary = '';
   let content = rawContent;
 
-  // 1. EML Email Parsing
+  // 1. EML Email Parsing with Full Header & MIME Decoder
   if (
     ext === 'eml' || 
     ext === 'msg' || 
@@ -601,7 +479,7 @@ export function processFileIntoDocument(file: { name: string; lastModified?: num
     rawContent.slice(0, 300).includes('Objet:')
   ) {
     category = 'email';
-    categoryLabel = 'Courriel (.eml)';
+    categoryLabel = 'Courriel';
 
     const parsedEml = parseEmlContent(rawContent);
     if (parsedEml.author && parsedEml.author !== 'Équipe Projet') author = parsedEml.author;
@@ -609,58 +487,38 @@ export function processFileIntoDocument(file: { name: string; lastModified?: num
     summary = `Courriel : ${parsedEml.subject} (De : ${author}${parsedEml.recipient ? ` à ${parsedEml.recipient}` : ''})`;
     content = parsedEml.formattedContent;
   } 
-  // 2. Excel / CSV Spreadsheets
-  else if (['xlsx', 'xls', 'csv', 'ods', 'tsv'].includes(ext) || lowerName.includes('excel') || lowerName.includes('budget') || lowerName.includes('facture') || lowerName.includes('tableau') || lowerName.includes('finances')) {
-    category = 'contract_finance';
-    categoryLabel = 'Tableau Excel & Données';
-    summary = `Tableau de données chiffrées : ${fileName}`;
-  }
-  // 3. Images / PNG / JPG OCR Scans
-  else if (['png', 'jpg', 'jpeg', 'webp', 'bmp'].includes(ext) || lowerName.includes('capture') || lowerName.includes('schema') || lowerName.includes('diagramme')) {
-    category = lowerName.includes('schema') || lowerName.includes('archi') ? 'architecture' : 'project_doc';
-    categoryLabel = 'Scan d\'Image & OCR';
-    summary = `Numérisation visuelle & OCR : ${fileName}`;
-  }
-  // 4. PDF Documents
-  else if (ext === 'pdf') {
-    if (lowerName.includes('contrat') || lowerName.includes('facture') || lowerName.includes('devis') || lowerName.includes('avenant')) {
-      category = 'contract_finance';
-      categoryLabel = 'Contrat & Finances (PDF)';
-    } else if (lowerName.includes('arch') || lowerName.includes('adr') || lowerName.includes('spec')) {
-      category = 'architecture';
-      categoryLabel = 'Spécification Technique (PDF)';
-    } else {
-      category = 'project_doc';
-      categoryLabel = 'Document PDF';
-    }
-    summary = `Rapport / Document PDF : ${fileName}`;
-  }
-  // 5. Meeting Notes / Transcripts
+  // 2. Meeting Notes / Transcripts
   else if (lowerName.includes('cr_') || lowerName.includes('cr-') || lowerName.includes('reunion') || lowerName.includes('meeting') || lowerName.includes('copil') || lowerName.includes('pv_') || lowerName.includes('comite') || lowerName.includes('transcript')) {
     category = 'meeting';
     categoryLabel = 'Compte-rendu Réunion';
     summary = `Compte-rendu : ${fileName.replace(/\.[^/.]+$/, '').replace(/[_-]/g, ' ')}`;
   }
-  // 6. Tickets / Bugs / JIRA
+  // 3. Tickets / Bugs / JIRA
   else if (lowerName.includes('jira') || lowerName.includes('bug') || lowerName.includes('ticket') || lowerName.includes('perf-') || lowerName.includes('acc-') || lowerName.includes('sec-') || lowerName.includes('int-') || lowerName.includes('incident')) {
     category = 'ticket';
     categoryLabel = 'Ticket & Incident';
     summary = `Ticket d'incident : ${fileName}`;
   }
-  // 7. Architecture / ADR / Specs
+  // 4. Architecture / ADR / Specs
   else if (lowerName.includes('adr') || lowerName.includes('arch') || lowerName.includes('spec') || lowerName.includes('tech')) {
     category = 'architecture';
     categoryLabel = 'Architecture (ADR)';
     summary = `Décision d'architecture : ${fileName}`;
   }
-  // 8. Teams / Chat
+  // 5. Contracts & Finance
+  else if (lowerName.includes('facture') || lowerName.includes('contrat') || lowerName.includes('budget') || lowerName.includes('devis') || lowerName.includes('finance') || lowerName.includes('inv-') || lowerName.includes('cr-')) {
+    category = 'contract_finance';
+    categoryLabel = 'Contrat & Finances';
+    summary = `Pièce comptable / contractuelle : ${fileName}`;
+  }
+  // 6. Teams / Chat
   else if (lowerName.includes('teams') || lowerName.includes('chat') || lowerName.includes('slack')) {
     category = 'teams';
     categoryLabel = 'Discussion Teams';
     summary = `Échanges de messagerie : ${fileName}`;
   }
 
-  // Extract author if mentioned in text
+  // Extract author if not email but mentioned in first lines
   if (author === 'Équipe Projet') {
     const authorLineMatch = rawContent.slice(0, 800).match(/(?:Auteur|Author|Rédacteur|Par|De|From)\s*[:=]\s*([^\r\n]+)/i);
     if (authorLineMatch) {
@@ -686,13 +544,13 @@ export function processFileIntoDocument(file: { name: string; lastModified?: num
 
   return {
     id: `doc-${index}-${fileName.replace(/[^a-zA-Z0-9]/g, '_')}`,
-    name: cleanUtfString(fileName),
+    name: fileName,
     category,
     categoryLabel,
     date,
-    author: cleanUtfString(author),
-    summary: cleanUtfString(summary),
-    content: cleanUtfString(content),
+    author,
+    summary,
+    content,
     tags: [categoryLabel, ext.toUpperCase()],
     fileType: ext.toUpperCase(),
     relevanceStatus: 'valid'
@@ -703,7 +561,7 @@ export function cleanHeaderValue(val: string): string {
   if (!val) return '';
   return val
     .replace(/^["'\s]+|["'\s]+$/g, '')
-    .replace(/<[^>]+>/g, '')
+    .replace(/<[^>]+>/g, '') // remove email address brackets <user@domain.com>
     .trim();
 }
 
@@ -716,6 +574,7 @@ export function tryParseDate(dateStr: string): string | null {
     }
   } catch {}
 
+  // Parse french dates like "15 septembre 2026" or "02 juillet 2026 09:15"
   const frenchMonths: Record<string, string> = {
     'janvier': '01', 'fevrier': '02', 'février': '02', 'mars': '03', 'avril': '04',
     'mai': '05', 'juin': '06', 'juillet': '07', 'aout': '08', 'août': '08',
@@ -732,6 +591,7 @@ export function tryParseDate(dateStr: string): string | null {
     if (month) return `${year}-${month}-${day}`;
   }
 
+  // Parse slash/dash formats "14/07/2026" or "2026-07-14"
   const isoMatch = dateStr.match(/(\d{4})[/-](\d{1,2})[/-](\d{1,2})/);
   if (isoMatch) {
     return `${isoMatch[1]}-${isoMatch[2].padStart(2, '0')}-${isoMatch[3].padStart(2, '0')}`;

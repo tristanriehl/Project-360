@@ -18,7 +18,6 @@ import {
 import { ChatMessage, ProjectDocument } from '../types/project';
 import { useLanguage } from '../context/LanguageContext';
 import { FormattedChatMessage } from './FormattedChatMessage';
-import { cleanUtfString, sanitizeObjectUtf } from '../utils/cleanUtf';
 
 interface RagChatProps {
   documents: ProjectDocument[];
@@ -130,10 +129,10 @@ export const RagChat: React.FC<RagChatProps> = ({
       const assistantMsg: ChatMessage = {
         id: 'assistant-' + Date.now(),
         role: 'assistant',
-        content: cleanUtfString(data.answer) || "Réponse traitée à partir des documents.",
+        content: data.answer || "Réponse traitée à partir des documents.",
         timestamp: new Date().toLocaleTimeString('fr-CA', { hour: '2-digit', minute: '2-digit' }),
-        citations: sanitizeObjectUtf(data.citations || []),
-        suggestedFollowUps: sanitizeObjectUtf(data.suggestedFollowUps || [])
+        citations: data.citations || [],
+        suggestedFollowUps: data.suggestedFollowUps || []
       };
 
       setMessages(prev => [...prev, assistantMsg]);
@@ -274,10 +273,7 @@ export const RagChat: React.FC<RagChatProps> = ({
 
                       <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
                         {msg.citations.map((cite, cIdx) => {
-                          const docNameClean = cleanUtfString(cite.docName || '');
-                          const quoteClean = cleanUtfString(cite.quote || '');
-                          const relevanceClean = cleanUtfString(cite.relevance || '');
-                          const matchingDoc = findDocumentByName(docNameClean);
+                          const matchingDoc = findDocumentByName(cite.docName);
 
                           return (
                             <div
@@ -287,7 +283,7 @@ export const RagChat: React.FC<RagChatProps> = ({
                               <div className="flex items-center justify-between gap-1">
                                 <span className="font-bold text-blue-900 dark:text-blue-300 truncate max-w-[200px] flex items-center gap-1">
                                   <FileText className="w-3 h-3 text-blue-500 shrink-0" />
-                                  <span>{docNameClean}</span>
+                                  <span>{cite.docName}</span>
                                 </span>
                                 {matchingDoc && (
                                   <button
@@ -301,11 +297,11 @@ export const RagChat: React.FC<RagChatProps> = ({
                               </div>
 
                               <p className="text-[11px] text-slate-700 dark:text-slate-300 italic font-mono bg-white/70 dark:bg-slate-900/70 p-2 rounded-lg border border-blue-100 dark:border-blue-900/30">
-                                "{quoteClean}"
+                                "{cite.quote}"
                               </p>
 
                               <p className="text-[10px] text-blue-800 dark:text-blue-400">
-                                <strong>{isEn ? 'Relevance :' : 'Pertinence :'}</strong> {relevanceClean}
+                                <strong>{isEn ? 'Relevance :' : 'Pertinence :'}</strong> {cite.relevance}
                               </p>
                             </div>
                           );
