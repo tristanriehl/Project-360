@@ -1,5 +1,13 @@
 # Projet 360 — Operational Memory & RAG Project Cockpit
 
+[![GitHub](https://img.shields.io/badge/GitHub-Project--360-181717?logo=github&logoColor=white)](https://github.com/tristanriehl/Project-360)
+[![TypeScript](https://img.shields.io/badge/TypeScript-5.x-3178c6?logo=typescript&logoColor=white)](https://www.typescriptlang.org/)
+[![React](https://img.shields.io/badge/React-19.0-61dafb?logo=react&logoColor=black)](https://react.dev/)
+[![TailwindCSS](https://img.shields.io/badge/Tailwind_CSS-v4-38bdf8?logo=tailwindcss&logoColor=white)](https://tailwindcss.com/)
+[![Gemini](https://img.shields.io/badge/Gemini_3.1-Flash_Lite-8e75ff?logo=google&logoColor=white)](https://ai.google.dev/)
+
+> **GitHub Repository:** [https://github.com/tristanriehl/Project-360](https://github.com/tristanriehl/Project-360)
+> 
 > Real-time operational project memory, automated discrepancy & contradiction detection, natural language RAG with strict document citations, and dynamic new event impact analysis.
 
 ---
@@ -16,12 +24,12 @@ This application is built with **Node.js, Express, React 19, TypeScript, and Tai
 
 ### 💻 Step-by-Step Installation & Run / Instructions Pas-à-Pas
 
-#### 1. Clone or Extract the Project
+#### 1. Clone the Repository
 Open your terminal (macOS/Linux) or PowerShell / Command Prompt (Windows):
 
 ```bash
-git clone <your-repository-url> projet-360
-cd projet-360
+git clone https://github.com/tristanriehl/Project-360.git
+cd Project-360
 ```
 
 #### 2. Install Dependencies
@@ -96,3 +104,9 @@ Navigate to:
   Set-ExecutionPolicy -Scope Process -ExecutionPolicy Bypass
   npm run dev
   ```
+
+---
+
+### 🔗 Project Links
+- **Source Code**: [https://github.com/tristanriehl/Project-360](https://github.com/tristanriehl/Project-360)
+- **Author**: Tristan Riehl

@@ -39,9 +39,9 @@ export const LocalDemoModal: React.FC<LocalDemoModalProps> = ({ isOpen, onClose 
   const steps = isEn ? [
     {
       id: 'step1',
-      title: '1. Clone or download the repository to your computer',
+      title: '1. Clone the repository to your computer',
       desc: 'Open your terminal (macOS/Linux) or PowerShell (Windows) and enter your local workspace directory:',
-      command: `git clone <your-repo-url> projet-360\ncd projet-360`
+      command: `git clone https://github.com/tristanriehl/Project-360.git\ncd Project-360`
     },
     {
       id: 'step2',
@@ -64,9 +64,9 @@ export const LocalDemoModal: React.FC<LocalDemoModalProps> = ({ isOpen, onClose 
   ] : [
     {
       id: 'step1',
-      title: '1. Télécharger ou cloner le projet sur votre ordinateur',
+      title: '1. Cloner le projet sur votre ordinateur',
       desc: 'Ouvrez votre terminal (macOS/Linux) ou PowerShell (Windows) dans votre dossier de travail :',
-      command: `git clone <votre-depot> projet-360\ncd projet-360`
+      command: `git clone https://github.com/tristanriehl/Project-360.git\ncd Project-360`
     },
     {
       id: 'step2',
@@ -185,16 +185,24 @@ export const LocalDemoModal: React.FC<LocalDemoModalProps> = ({ isOpen, onClose 
         </div>
 
         {/* Footer */}
-        <div className="p-4 border-t border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-900 flex items-center justify-between">
-          <span className="text-slate-500 text-[11px]">
-            {isEn ? 'Ready for local development & presentations' : 'Prêt pour exécution locale et démonstration'}
-          </span>
-          <button
-            onClick={onClose}
-            className="px-5 py-2 rounded-xl bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs shadow-md shadow-blue-500/20 transition-all cursor-pointer"
+        <div className="p-4 border-t border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-900 flex flex-wrap items-center justify-between gap-3">
+          <a
+            href="https://github.com/tristanriehl/Project-360"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="flex items-center gap-2 text-xs font-semibold text-slate-700 dark:text-slate-300 hover:text-blue-600 dark:hover:text-blue-400 transition-colors"
           >
-            {isEn ? 'Close' : 'Fermer'}
-          </button>
+            <ExternalLink className="w-3.5 h-3.5 text-blue-500" />
+            <span>https://github.com/tristanriehl/Project-360</span>
+          </a>
+          <div className="flex items-center gap-2">
+            <button
+              onClick={onClose}
+              className="px-5 py-2 rounded-xl bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs shadow-md shadow-blue-500/20 transition-all cursor-pointer"
+            >
+              {isEn ? 'Close' : 'Fermer'}
+            </button>
+          </div>
         </div>
       </div>
     </div>

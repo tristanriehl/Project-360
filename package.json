@@ -1,7 +1,13 @@
 {
-  "name": "react-example",
+  "name": "project-360",
   "private": true,
-  "version": "0.0.0",
+  "version": "1.0.0",
+  "description": "Operational Memory & RAG Project Cockpit",
+  "homepage": "https://github.com/tristanriehl/Project-360",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/tristanriehl/Project-360.git"
+  },
   "type": "module",
   "scripts": {
     "dev": "tsx server.ts",
