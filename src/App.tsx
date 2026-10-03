@@ -5,6 +5,7 @@ import { RagChat } from './components/RagChat';
 import { NewEventSimulator } from './components/NewEventSimulator';
 import { DecisionsRegister } from './components/DecisionsRegister';
 import { ContradictionsDetector } from './components/ContradictionsDetector';
+import { FinancesPanel } from './components/FinancesPanel';
 import { TimelineView } from './components/TimelineView';
 import { ExecutiveBriefing } from './components/ExecutiveBriefing';
 import { DocumentViewerModal } from './components/DocumentViewerModal';
@@ -200,6 +201,15 @@ export default function App() {
                   analysis={analysis}
                   documents={documents}
                   onSelectDocument={setSelectedDocument}
+                />
+              )}
+
+              {activeTab === 'finances' && (
+                <FinancesPanel
+                  analysis={analysis}
+                  documents={documents}
+                  onSelectDocument={setSelectedDocument}
+                  onNavigateTab={setActiveTab}
                 />
               )}
 
