@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useRef } from 'react';
 import { 
   Sparkles, 
   AlertTriangle, 
@@ -11,7 +11,10 @@ import {
   FileText, 
   ShieldAlert, 
   Users,
-  Check
+  Check,
+  UploadCloud,
+  FileUp,
+  X
 } from 'lucide-react';
 import { NewEventImpact, ProjectAnalysis, ProjectDocument } from '../types/project';
 
@@ -29,6 +32,10 @@ export const NewEventSimulator: React.FC<NewEventSimulatorProps> = ({
   const [content, setContent] = useState('');
   const [category, setCategory] = useState<'email' | 'ticket' | 'project_doc'>('email');
   
+  const [uploadedFileName, setUploadedFileName] = useState<string | null>(null);
+  const [isDragging, setIsDragging] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
   const [isProcessing, setIsProcessing] = useState(false);
   const [latestImpact, setLatestImpact] = useState<NewEventImpact | null>(null);
   const [latestDoc, setLatestDoc] = useState<ProjectDocument | null>(null);
@@ -84,6 +91,67 @@ Action requise : Mise à niveau immédiate de la version v4.2.1 vers v5.0.0 et r
     setAuthor(sc.author);
     setContent(sc.content);
     setCategory(sc.category);
+    setUploadedFileName(null);
+  };
+
+  const handleProcessFile = (file: File) => {
+    if (!file) return;
+    setUploadedFileName(`${file.name} (${(file.size / 1024).toFixed(1)} Ko)`);
+
+    const reader = new FileReader();
+    reader.onload = (e) => {
+      const text = (e.target?.result as string) || '';
+      setContent(text);
+
+      // Auto-derive clean title if empty or generic
+      const cleanName = file.name.replace(/\.[^/.]+$/, '').replace(/[_-]/g, ' ');
+      const capitalizedTitle = cleanName.charAt(0).toUpperCase() + cleanName.slice(1);
+      setTitle(capitalizedTitle);
+
+      // Auto-detect category
+      const lowerName = file.name.toLowerCase();
+      if (lowerName.endsWith('.eml') || text.includes('De:') || text.includes('From:')) {
+        setCategory('email');
+        const fromMatch = text.match(/(?:De|From):\s*([^\r\n<]+)/i);
+        if (fromMatch && fromMatch[1]) {
+          setAuthor(fromMatch[1].trim());
+        }
+      } else if (lowerName.endsWith('.csv') || lowerName.endsWith('.log') || text.includes('TICKET') || text.includes('JIRA') || text.includes('SEC-') || text.includes('BUG')) {
+        setCategory('ticket');
+      } else {
+        setCategory('project_doc');
+      }
+    };
+    reader.readAsText(file);
+  };
+
+  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    if (e.target.files && e.target.files[0]) {
+      handleProcessFile(e.target.files[0]);
+    }
+  };
+
+  const handleDragOver = (e: React.DragEvent) => {
+    e.preventDefault();
+    setIsDragging(true);
+  };
+
+  const handleDragLeave = (e: React.DragEvent) => {
+    e.preventDefault();
+    setIsDragging(false);
+  };
+
+  const handleDrop = (e: React.DragEvent) => {
+    e.preventDefault();
+    setIsDragging(false);
+    if (e.dataTransfer.files && e.dataTransfer.files[0]) {
+      handleProcessFile(e.dataTransfer.files[0]);
+    }
+  };
+
+  const handleRemoveUploadedFile = () => {
+    setUploadedFileName(null);
+    if (fileInputRef.current) fileInputRef.current.value = '';
   };
 
   const handleSubmitEvent = async (e: React.FormEvent) => {
@@ -128,46 +196,40 @@ Action requise : Mise à niveau immédiate de la version v4.2.1 vers v5.0.0 et r
   };
 
   return (
-    <div className="space-y-6 animate-fadeIn pb-12">
-      {/* Challenge Header Box */}
-      <div className="p-6 rounded-2xl bg-gradient-to-r from-amber-600 via-orange-600 to-amber-700 text-white shadow-xl shadow-amber-500/10">
-        <div className="flex items-center gap-3 mb-2">
-          <div className="p-2.5 rounded-xl bg-white/20 backdrop-blur-md">
-            <Sparkles className="w-6 h-6 text-amber-200 animate-spin" />
+    <div className="space-y-5 animate-fadeIn pb-12">
+      {/* Sleek Minimalist Header */}
+      <div className="flex items-center justify-between pb-3 border-b border-slate-200 dark:border-slate-800">
+        <div className="flex items-center gap-2.5">
+          <div className="p-2 rounded-xl bg-amber-50 dark:bg-amber-950/60 text-amber-600 dark:text-amber-400 border border-amber-200 dark:border-amber-900/50">
+            <Sparkles className="w-5 h-5" />
           </div>
           <div>
-            <span className="px-2 py-0.5 rounded text-[10px] font-black uppercase bg-white/20 tracking-wider">
-              Épreuve Finale Défi 24h
-            </span>
-            <h2 className="text-xl font-black tracking-tight">
-              « Un nouvel événement survient » — Détection &amp; Analyse d'Impact
+            <h2 className="text-base font-bold text-slate-900 dark:text-white">
+              Nouvel Événement &amp; Impact Direct
             </h2>
+            <p className="text-xs text-slate-500">Intégration d'information surprise et réévaluation de la mémoire</p>
           </div>
         </div>
-        <p className="text-xs text-amber-100 max-w-3xl leading-relaxed">
-          Lorsqu'une nouvelle information imprévue arrive (courriel urgent, audit, demande de changement, incident), le Cerveau IA réévalue instantanément toute la mémoire du projet et répond aux 3 questions imposées.
-        </p>
       </div>
 
       {/* Preset Scenarios for Quick Demo */}
-      <div className="p-5 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-sm">
-        <div className="flex items-center gap-2 text-xs font-bold uppercase tracking-wider text-slate-500 mb-3">
-          <Clock className="w-4 h-4 text-amber-500" />
-          <span>Charger un scénario de test d'événement imprévu :</span>
+      <div className="p-4 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-xs space-y-2">
+        <div className="text-[11px] font-bold uppercase tracking-wider text-slate-400">
+          Scénarios d'urgence rapides (1-clic) :
         </div>
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-2">
           {emergencyScenarios.map((sc, idx) => (
             <button
               key={idx}
               type="button"
               onClick={() => handleApplyPreset(sc)}
-              className="p-3 rounded-xl bg-slate-50 dark:bg-slate-800/60 hover:bg-amber-50 dark:hover:bg-amber-950/40 border border-slate-200 dark:border-slate-700 hover:border-amber-400 text-left transition-all group"
+              className="p-2.5 rounded-lg bg-slate-50 dark:bg-slate-800/60 hover:bg-amber-50 dark:hover:bg-amber-950/40 border border-slate-200 dark:border-slate-700 hover:border-amber-400 text-left transition-all text-xs"
             >
-              <div className="text-xs font-bold text-slate-800 dark:text-slate-200 group-hover:text-amber-600 dark:group-hover:text-amber-400">
-                {sc.label}
+              <div className="font-bold text-slate-800 dark:text-slate-200 truncate">
+                {sc.title}
               </div>
-              <div className="text-[11px] text-slate-400 mt-1 truncate">
-                Auteur : {sc.author}
+              <div className="text-[10px] text-slate-400 mt-0.5">
+                {sc.author}
               </div>
             </button>
           ))}
@@ -175,12 +237,94 @@ Action requise : Mise à niveau immédiate de la version v4.2.1 vers v5.0.0 et r
       </div>
 
       {/* Main Input Form */}
-      <form onSubmit={handleSubmitEvent} className="p-6 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-sm space-y-4">
-        <h3 className="text-sm font-bold text-slate-900 dark:text-white">
-          Saisir ou Téléverser la nouvelle information
-        </h3>
+      <form onSubmit={handleSubmitEvent} className="p-5 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-xs space-y-4">
+        {/* Hidden File Input */}
+        <input
+          type="file"
+          ref={fileInputRef}
+          onChange={handleFileChange}
+          accept=".txt,.eml,.csv,.log,.md,.json"
+          className="hidden"
+        />
 
-        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+        {/* File Upload / Dropzone Box */}
+        <div>
+          <div className="flex items-center justify-between mb-1.5">
+            <label className="block text-xs font-bold text-slate-700 dark:text-slate-300">
+              Téléverser ou Glisser un document source
+            </label>
+            <span className="text-[10px] text-slate-400">.eml, .txt, .csv, .log, .md, .json</span>
+          </div>
+
+          {!uploadedFileName ? (
+            <div
+              onDragOver={handleDragOver}
+              onDragLeave={handleDragLeave}
+              onDrop={handleDrop}
+              onClick={() => fileInputRef.current?.click()}
+              className={`p-4 rounded-xl border-2 border-dashed transition-all cursor-pointer flex flex-col sm:flex-row items-center justify-between gap-3 text-center sm:text-left ${
+                isDragging
+                  ? 'border-amber-500 bg-amber-50/60 dark:bg-amber-950/40 text-amber-700 dark:text-amber-300'
+                  : 'border-slate-300 dark:border-slate-700 hover:border-amber-400 hover:bg-slate-50 dark:hover:bg-slate-800/60'
+              }`}
+            >
+              <div className="flex items-center gap-3">
+                <div className="p-2.5 rounded-xl bg-amber-100 dark:bg-amber-950 text-amber-600 dark:text-amber-400">
+                  <UploadCloud className="w-5 h-5" />
+                </div>
+                <div>
+                  <div className="text-xs font-bold text-slate-800 dark:text-slate-200">
+                    Déposez un fichier ici ou <span className="text-amber-600 dark:text-amber-400 underline">parcourez votre ordinateur</span>
+                  </div>
+                  <div className="text-[11px] text-slate-400 mt-0.5">
+                    Le contenu, le titre et l'auteur seront automatiquement extraits
+                  </div>
+                </div>
+              </div>
+
+              <button
+                type="button"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  fileInputRef.current?.click();
+                }}
+                className="px-3 py-1.5 rounded-lg bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-200 text-xs font-semibold hover:bg-amber-50 dark:hover:bg-amber-950/40 hover:text-amber-700 transition-colors shrink-0"
+              >
+                Sélectionner un fichier
+              </button>
+            </div>
+          ) : (
+            <div className="p-3 rounded-xl bg-emerald-50 dark:bg-emerald-950/30 border border-emerald-300 dark:border-emerald-800 flex items-center justify-between gap-3">
+              <div className="flex items-center gap-2.5 min-w-0">
+                <CheckCircle2 className="w-4 h-4 text-emerald-600 dark:text-emerald-400 shrink-0" />
+                <div className="truncate text-xs font-bold text-emerald-950 dark:text-emerald-200">
+                  Fichier importé : <span className="font-mono text-emerald-700 dark:text-emerald-300">{uploadedFileName}</span>
+                </div>
+              </div>
+
+              <div className="flex items-center gap-2 shrink-0">
+                <button
+                  type="button"
+                  onClick={() => fileInputRef.current?.click()}
+                  className="text-[11px] font-semibold text-emerald-800 dark:text-emerald-300 hover:underline"
+                >
+                  Changer
+                </button>
+                <button
+                  type="button"
+                  onClick={handleRemoveUploadedFile}
+                  className="p-1 rounded-md text-emerald-700 hover:text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-950/40 transition-colors"
+                  title="Retirer le fichier"
+                >
+                  <X className="w-3.5 h-3.5" />
+                </button>
+              </div>
+            </div>
+          )}
+        </div>
+
+        {/* Metadata inputs */}
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
           <div>
             <label className="block text-xs font-bold text-slate-600 dark:text-slate-400 mb-1">
               Titre de l'événement

@@ -31,10 +31,7 @@ export const RagChat: React.FC<RagChatProps> = ({
     {
       id: 'welcome',
       role: 'assistant',
-      content: `Bonjour ! Je suis la mémoire opérationnelle RAG du Projet NOVA.
-J'ai analysé et indexé l'ensemble des courriels, comptes-rendus de réunions, billets de suivi, documents d'architecture ADR, contrats et factures.
-
-Vous pouvez m'interroger en langage naturel sur l'état d'avancement, les arbitrages, les dates de livraison, les risques ou les contradictions relevées.`,
+      content: `Mémoire opérationnelle indexée sur 35+ documents (courriels, comptes-rendus, contrats, JIRA). Posez vos questions sur les dates, décisions, risques ou contradictions.`,
       timestamp: new Date().toLocaleTimeString('fr-CA', { hour: '2-digit', minute: '2-digit' }),
       citations: [
         {
@@ -147,37 +144,34 @@ Vous pouvez m'interroger en langage naturel sur l'état d'avancement, les arbitr
   };
 
   return (
-    <div className="space-y-6 animate-fadeIn pb-12">
-      {/* Header Info */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 p-5 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-sm">
-        <div className="flex items-center gap-3">
-          <div className="p-2.5 rounded-xl bg-gradient-to-tr from-blue-600 to-cyan-500 text-white shadow-md shadow-blue-500/20">
-            <Bot className="w-6 h-6" />
+    <div className="space-y-4 animate-fadeIn pb-12">
+      {/* Sleek Minimalist Header */}
+      <div className="flex items-center justify-between pb-3 border-b border-slate-200 dark:border-slate-800">
+        <div className="flex items-center gap-2.5">
+          <div className="p-2 rounded-xl bg-blue-50 dark:bg-blue-950/60 text-blue-600 dark:text-blue-400 border border-blue-200 dark:border-blue-900/50">
+            <Bot className="w-5 h-5" />
           </div>
           <div>
-            <h2 className="text-base font-black text-slate-900 dark:text-white">
-              Assistant RAG &amp; Interrogation en Langage Naturel
+            <h2 className="text-base font-bold text-slate-900 dark:text-white">
+              Assistant RAG
             </h2>
-            <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
-              Toutes les réponses sont rigoureusement justifiées par des citations et des preuves documentaires.
-            </p>
+            <p className="text-xs text-slate-500">Interrogation naturelle avec preuves et citations</p>
           </div>
         </div>
 
         <button
           onClick={() => setMessages(messages.slice(0, 1))}
-          className="px-3 py-1.5 rounded-xl border border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300 text-xs font-semibold hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors flex items-center gap-1.5 self-start sm:self-auto"
+          className="px-3 py-1.5 rounded-xl border border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300 text-xs font-semibold hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors flex items-center gap-1.5"
         >
           <RotateCcw className="w-3.5 h-3.5" />
-          <span>Nouvelle conversation</span>
+          <span>Effacer</span>
         </button>
       </div>
 
       {/* Suggested Questions Grid */}
-      <div className="p-4 rounded-2xl bg-blue-50/60 dark:bg-blue-950/20 border border-blue-200/60 dark:border-blue-900/40">
-        <div className="flex items-center gap-1.5 text-xs font-bold text-blue-900 dark:text-blue-300 uppercase tracking-wider mb-2.5">
-          <HelpCircle className="w-3.5 h-3.5" />
-          <span>Questions d'arbitrage recommandées (Défi 360) :</span>
+      <div className="p-3.5 rounded-xl bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 space-y-2">
+        <div className="text-[11px] font-bold uppercase tracking-wider text-slate-400">
+          Questions d'arbitrage suggérées :
         </div>
         <div className="flex flex-wrap gap-2">
           {sampleChallengeQuestions.map((q, idx) => (

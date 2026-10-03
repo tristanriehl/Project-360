@@ -9,6 +9,19 @@
     <meta property="og:description" content="Intelligent RAG operational memory engine and dynamic project dashboard. Synthesizes emails, documents, tickets, and meetings into an interactive 360° cockpit with contradiction detection, timeline reconstruction, and decision evidence tracking." />
     <meta property="og:type" content="website" />
     <meta name="twitter:card" content="summary_large_image" />
+    <script>
+      (function() {
+        try {
+          var stored = localStorage.getItem('app-theme') || 'system';
+          var isDark = stored === 'dark' || (stored === 'system' && window.matchMedia('(prefers-color-scheme: dark)').matches);
+          if (isDark) {
+            document.documentElement.classList.add('dark');
+          } else {
+            document.documentElement.classList.remove('dark');
+          }
+        } catch (e) {}
+      })();
+    </script>
   </head>
   <body>
     <div id="root"></div>

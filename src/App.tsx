@@ -1,17 +1,16 @@
 import React, { useState, useEffect } from 'react';
 import { Sidebar, TabType } from './components/Sidebar';
 import { DashboardOverview } from './components/DashboardOverview';
-import { ProjectBrainGraph } from './components/ProjectBrainGraph';
 import { RagChat } from './components/RagChat';
 import { NewEventSimulator } from './components/NewEventSimulator';
 import { DecisionsRegister } from './components/DecisionsRegister';
 import { ContradictionsDetector } from './components/ContradictionsDetector';
 import { TimelineView } from './components/TimelineView';
-import { DocumentManager } from './components/DocumentManager';
 import { ExecutiveBriefing } from './components/ExecutiveBriefing';
-import { ArchitectureAdvisor } from './components/ArchitectureAdvisor';
 import { DocumentViewerModal } from './components/DocumentViewerModal';
 import { LocalDemoModal } from './components/LocalDemoModal';
+import { FlowchartModal } from './components/FlowchartModal';
+import { MoreModal } from './components/MoreModal';
 import { INITIAL_NOVA_ANALYSIS, SAMPLE_DOCUMENTS_NOVA } from './data/sampleProjects';
 import { ProjectAnalysis, ProjectDocument } from './types/project';
 
@@ -23,6 +22,9 @@ export default function App() {
   const [isAnalyzing, setIsAnalyzing] = useState(false);
   const [initialChatQuery, setInitialChatQuery] = useState<string | undefined>(undefined);
   const [isLocalGuideOpen, setIsLocalGuideOpen] = useState(false);
+  const [isFlowchartOpen, setIsFlowchartOpen] = useState(false);
+  const [isMoreModalOpen, setIsMoreModalOpen] = useState(false);
+  const [moreModalTab, setMoreModalTab] = useState<'brain_sources' | 'advisor'>('brain_sources');
 
   // Fetch current state from backend on mount
   useEffect(() => {
@@ -102,6 +104,11 @@ export default function App() {
         onRefresh={handleRefreshAnalysis}
         isAnalyzing={isAnalyzing}
         onOpenLocalGuide={() => setIsLocalGuideOpen(true)}
+        onOpenFlowchart={() => setIsFlowchartOpen(true)}
+        onOpenMore={() => {
+          setMoreModalTab('brain_sources');
+          setIsMoreModalOpen(true);
+        }}
       />
 
       {/* Main Content Viewport */}
@@ -112,14 +119,6 @@ export default function App() {
             documents={documents}
             onSelectDocument={setSelectedDocument}
             onNavigateTab={setActiveTab}
-          />
-        )}
-
-        {activeTab === 'brain' && (
-          <ProjectBrainGraph
-            analysis={analysis}
-            documents={documents}
-            onSelectDocument={setSelectedDocument}
           />
         )}
 
@@ -162,25 +161,11 @@ export default function App() {
           />
         )}
 
-        {activeTab === 'documents' && (
-          <DocumentManager
-            documents={documents}
-            onSelectDocument={setSelectedDocument}
-            onRefreshAnalysis={handleRefreshAnalysis}
-            isAnalyzing={isAnalyzing}
-            onDocumentsAdded={handleDocumentsAdded}
-          />
-        )}
-
         {activeTab === 'briefing' && (
           <ExecutiveBriefing
             analysis={analysis}
             documents={documents}
           />
-        )}
-
-        {activeTab === 'advisor' && (
-          <ArchitectureAdvisor />
         )}
       </main>
 
@@ -194,6 +179,25 @@ export default function App() {
       <LocalDemoModal
         isOpen={isLocalGuideOpen}
         onClose={() => setIsLocalGuideOpen(false)}
+      />
+
+      {/* Minimalist Architecture Flowchart Modal */}
+      <FlowchartModal
+        isOpen={isFlowchartOpen}
+        onClose={() => setIsFlowchartOpen(false)}
+      />
+
+      {/* More Modal: Combined Cerveau & Sources + Frontier vs Local LLM */}
+      <MoreModal
+        isOpen={isMoreModalOpen}
+        onClose={() => setIsMoreModalOpen(false)}
+        analysis={analysis}
+        documents={documents}
+        onSelectDocument={setSelectedDocument}
+        onRefreshAnalysis={handleRefreshAnalysis}
+        isAnalyzing={isAnalyzing}
+        onDocumentsAdded={handleDocumentsAdded}
+        initialSubTab={moreModalTab}
       />
     </div>
   );
