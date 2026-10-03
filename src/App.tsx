@@ -209,7 +209,7 @@ export default function App() {
                   analysis={analysis}
                   documents={documents}
                   onSelectDocument={setSelectedDocument}
-                  onNavigateTab={setActiveTab}
+                  onNavigateTab={(tab: string) => setActiveTab(tab as any)}
                 />
               )}
 
