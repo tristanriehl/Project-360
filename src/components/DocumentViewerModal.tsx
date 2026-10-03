@@ -1,6 +1,6 @@
 import React from 'react';
 import { ProjectDocument } from '../types/project';
-import { X, FileText, Calendar, User, Tag, CheckCircle2, AlertTriangle, Clock, Copy, Check } from 'lucide-react';
+import { X, FileText, Calendar, User, Tag, CheckCircle2, AlertTriangle, Clock, Copy, Check, Mail, Inbox, Send, Paperclip } from 'lucide-react';
 
 interface DocumentViewerModalProps {
   document: ProjectDocument | null;
@@ -17,6 +17,8 @@ export const DocumentViewerModal: React.FC<DocumentViewerModalProps> = ({ docume
     setCopied(true);
     setTimeout(() => setCopied(false), 2000);
   };
+
+  const isEmail = document.category === 'email' || document.fileType?.toLowerCase() === 'eml';
 
   const getStatusBadge = (status?: string) => {
     switch (status) {
@@ -53,8 +55,8 @@ export const DocumentViewerModal: React.FC<DocumentViewerModalProps> = ({ docume
         {/* Modal Header */}
         <div className="flex items-center justify-between p-5 border-b border-slate-200 dark:border-slate-800 bg-slate-50/80 dark:bg-slate-900/80">
           <div className="flex items-center gap-3">
-            <div className="p-2.5 rounded-xl bg-blue-100 dark:bg-blue-950 text-blue-600 dark:text-blue-400">
-              <FileText className="w-6 h-6" />
+            <div className={`p-2.5 rounded-xl ${isEmail ? 'bg-sky-100 dark:bg-sky-950 text-sky-600 dark:text-sky-400' : 'bg-blue-100 dark:bg-blue-950 text-blue-600 dark:text-blue-400'}`}>
+              {isEmail ? <Mail className="w-6 h-6" /> : <FileText className="w-6 h-6" />}
             </div>
             <div>
               <div className="flex items-center gap-2">
@@ -95,7 +97,7 @@ export const DocumentViewerModal: React.FC<DocumentViewerModalProps> = ({ docume
           {document.author && (
             <div className="flex items-center gap-1.5">
               <User className="w-3.5 h-3.5 text-slate-400" />
-              <span>Auteur : <strong className="font-semibold text-slate-800 dark:text-slate-200">{document.author}</strong></span>
+              <span>Auteur / Expéditeur : <strong className="font-semibold text-slate-800 dark:text-slate-200">{document.author}</strong></span>
             </div>
           )}
           <div className="flex items-center gap-1.5 ml-auto">
@@ -113,8 +115,8 @@ export const DocumentViewerModal: React.FC<DocumentViewerModalProps> = ({ docume
         {/* Document Body */}
         <div className="p-6 overflow-y-auto max-h-[60vh] space-y-4">
           <div className="p-3.5 rounded-xl bg-blue-50/70 dark:bg-blue-950/30 border border-blue-100 dark:border-blue-900/50">
-            <p className="text-xs font-semibold text-blue-800 dark:text-blue-300 uppercase tracking-wider mb-1">
-              Synthèse automatique RAG
+            <p className="text-xs font-semibold text-blue-800 dark:text-blue-300 uppercase tracking-wider mb-1 flex items-center gap-1.5">
+              <SparklesIcon className="w-3.5 h-3.5 text-blue-600 dark:text-blue-400" /> Synthèse automatique de la pièce
             </p>
             <p className="text-sm text-blue-950 dark:text-blue-100 font-medium leading-relaxed">
               {document.summary}
@@ -122,8 +124,9 @@ export const DocumentViewerModal: React.FC<DocumentViewerModalProps> = ({ docume
           </div>
 
           <div>
-            <h4 className="text-xs font-bold uppercase tracking-wider text-slate-400 dark:text-slate-500 mb-2">
-              Contenu Intégral du Document
+            <h4 className="text-xs font-bold uppercase tracking-wider text-slate-400 dark:text-slate-500 mb-2 flex items-center justify-between">
+              <span>{isEmail ? 'Texte Décrypté du Courriel (.EML)' : 'Contenu Intégral du Document'}</span>
+              <span className="text-[11px] font-normal text-slate-500 lowercase">{document.content.length} caractères</span>
             </h4>
             <div className="p-4 rounded-xl bg-slate-900 text-slate-100 font-mono text-xs leading-relaxed overflow-x-auto whitespace-pre-wrap border border-slate-800 select-text shadow-inner">
               {document.content}
@@ -145,3 +148,11 @@ export const DocumentViewerModal: React.FC<DocumentViewerModalProps> = ({ docume
     </div>
   );
 };
+
+function SparklesIcon(props: React.SVGProps<SVGSVGElement>) {
+  return (
+    <svg fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor" {...props}>
+      <path strokeLinecap="round" strokeLinejoin="round" d="M9.813 15.904L9 18.75l-.813-2.846a4.5 4.5 0 00-3.09-3.09L2.25 12l2.846-.813a4.5 4.5 0 003.09-3.09L9 5.25l.813 2.846a4.5 4.5 0 003.09 3.09L15.75 12l-2.846.813a4.5 4.5 0 00-3.09 3.09zM18.259 8.715L18 9.75l-.259-1.035a3.375 3.375 0 00-2.455-2.456L14.25 6l1.036-.259a3.375 3.375 0 002.455-2.456L18 2.25l.259 1.035a3.375 3.375 0 002.456 2.456L21.75 6l-1.035.259a3.375 3.375 0 00-2.456 2.456zM16.894 20.567L16.5 21.75l-.394-1.183a2.25 2.25 0 00-1.423-1.423L13.5 18.75l1.183-.394a2.25 2.25 0 001.423-1.423l.394-1.183.394 1.183a2.25 2.25 0 001.423 1.423l1.183.394-1.183.394a2.25 2.25 0 00-1.423 1.423z" />
+    </svg>
+  );
+}

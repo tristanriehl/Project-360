@@ -7,6 +7,7 @@ import { INITIAL_NOVA_ANALYSIS, SAMPLE_DOCUMENTS_NOVA, SAMPLE_DOCUMENTS_ORION } 
 import { ProjectAnalysis, ProjectDocument } from './src/types/project.js';
 import { synthesizeDatasetLocally } from './src/utils/datasetSynthesizer.js';
 import { normalizeAnalysis } from './src/utils/normalizeAnalysis.js';
+import { processFileIntoDocument, parseEmlContent } from './src/utils/folderParser.js';
 
 dotenv.config();
 
@@ -116,25 +117,33 @@ function localKeywordSearch(query: string, docs: ProjectDocument[]) {
 
   docs.forEach(doc => {
     let score = 0;
-    const text = doc.content.toLowerCase();
+    const text = (doc.content || '').toLowerCase();
+    const docName = (doc.name || '').toLowerCase();
+    const docAuthor = (doc.author || '').toLowerCase();
+    const docSummary = (doc.summary || '').toLowerCase();
+
     queryTerms.forEach((term: string) => {
       if (text.includes(term)) score += 2;
-      if (doc.name.toLowerCase().includes(term)) score += 3;
+      if (docName.includes(term)) score += 4;
+      if (docAuthor.includes(term)) score += 5;
+      if (docSummary.includes(term)) score += 3;
     });
+
     if (score > bestScore) {
       bestScore = score;
       bestDoc = doc;
     }
 
-    const lines = doc.content.split(/\r?\n/);
+    const lines = (doc.content || '').split(/\r?\n/);
     for (const line of lines) {
       const cleanLine = line.trim();
-      if (queryTerms.some((t: string) => cleanLine.toLowerCase().includes(t)) && cleanLine.length > 20) {
-        if (bestMatches.length < 4 && !bestMatches.some(m => m.quote === cleanLine)) {
+      if (cleanLine.startsWith('---') || cleanLine.startsWith('===')) continue;
+      if (queryTerms.some((t: string) => cleanLine.toLowerCase().includes(t)) && cleanLine.length > 15) {
+        if (bestMatches.length < 5 && !bestMatches.some(m => m.quote === cleanLine)) {
           bestMatches.push({
             docName: doc.name,
-            quote: cleanLine.slice(0, 240),
-            relevance: `Extrait pertinent trouvé dans ${doc.name} (${doc.date})`
+            quote: cleanLine.slice(0, 260),
+            relevance: `Extrait pertinent (${doc.categoryLabel}) - ${doc.name} (${doc.date})`
           });
         }
       }
@@ -592,21 +601,26 @@ Question : "${question}"`;
       return res.json(localResult);
     }
 
-    // Build context for Gemini
-    const contextDocs = currentDocuments.map(d => `[DOC: ${d.name} | Catégorie: ${d.categoryLabel} | Date: ${d.date} | Auteur: ${d.author || 'N/A'}]
+    // Build context for Gemini with explicit email header emphasis
+    const contextDocs = currentDocuments.map(d => {
+      const isEmail = d.category === 'email' || d.fileType?.toLowerCase() === 'eml';
+      const typeHeader = isEmail ? `COURRIEL (.EML) - De: ${d.author || 'Inconnu'}` : `${d.categoryLabel} (${d.fileType})`;
+      return `[DOCUMENT: ${d.name} | Type: ${typeHeader} | Date: ${d.date} | Auteur/Expéditeur: ${d.author || 'N/A'}]
 Résumé: ${d.summary}
 Contenu:
-${d.content.slice(0, 2500)}`).join('\n\n');
+${d.content.slice(0, 3500)}`;
+    }).join('\n\n');
 
-    const systemPrompt = `Tu es le "Cerveau du Projet" - un assistant RAG expert en mémoire opérationnelle de projet.
-Ton rôle est de répondre avec une précision absolue aux questions en t'appuyant STRICTEMENT sur les documents fournis.
+    const systemPrompt = `Tu es le "Cerveau du Projet" - un assistant RAG expert en mémoire opérationnelle et analyse documentaire de projet.
+Ton rôle est de répondre avec une précision absolue aux questions en t'appuyant STRICTEMENT sur l'ensemble des documents fournis, y compris les courriels (.eml), comptes-rendus de réunions, décisions d'architecture (ADR), tickets JIRA, et contrats.
 
 Règles fondamentales :
-1. Fais toujours la distinction entre une information HISTORIQUE (périmée ou obsolète) et une information ACTUELLEMENT VALIDE.
-2. Identifie explicitement les contradictions lorsqu'il y en a et explique pourquoi une version prime sur une autre.
-3. Justifie TOUTES tes affirmations en citant le nom exact du ou des documents sources et en fournissant un extrait textuel (citation exacte).
-4. Si l'information est absente ou incertaine, dis-le clairement sans inventer.
-5. Sois direct, structuré et professionnel.
+1. COURRIELS & ÉCHANGES : Lorsqu'une question porte sur un courriel, un échange d'e-mails ou une personne (ex: 'Que dit l'email de...', 'Qu'a convenu Tristan...', 'Quel est le message de...'), identifie immédiatement le fichier .eml correspondant, cite son expéditeur (De:), son destinataire (À:), sa date et son objet.
+2. HISTORIQUE vs VALIDE : Fais toujours la distinction entre une information HISTORIQUE (périmée ou obsolète) et une information ACTUELLEMENT VALIDE.
+3. CONTRADICTIONS : Identifie explicitement les contradictions lorsqu'il y en a et explique pourquoi une version prime sur une autre.
+4. CITATIONS PRÉCISES : Justifie TOUTES tes affirmations en citant le nom exact du ou des documents sources (ex: [E01_Lancement.eml] ou [ADR-007.md]) et en fournissant une citation exacte entre guillemets.
+5. AUCUNE FABRICATION : Si l'information est absente ou incertaine dans les documents, dis-le clairement sans inventer.
+6. FORMAT & STRUCTURE : Sois direct, structuré et professionnel avec des listes à puces claires et titres lisibles.
 
 Voici l'ensemble des documents du projet :
 ${contextDocs}
@@ -959,49 +973,20 @@ app.post('/api/compare-projects', async (req: Request, res: Response) => {
 // 10. POST /api/ingest-files - Ingest custom user files (PDF, EML, TXT, CSV, MD, PPTX text)
 app.post('/api/ingest-files', async (req: Request, res: Response) => {
   try {
-    const { files } = req.body;
-    if (!files || !Array.isArray(files) || files.length === 0) {
+    const rawList = req.body.documents || req.body.files;
+    if (!rawList || !Array.isArray(rawList) || rawList.length === 0) {
       return res.status(400).json({ error: 'Aucun fichier fourni pour l\'ingestion.' });
     }
 
-    const newDocs: ProjectDocument[] = files.map((f: any, idx: number) => {
-      const ext = f.name?.split('.').pop()?.toLowerCase() || 'txt';
-      let cat: ProjectDocument['category'] = 'project_doc';
-      let catLabel = 'Document Projet';
-      
-      if (ext === 'eml' || f.name.toLowerCase().includes('courriel') || f.name.toLowerCase().includes('email')) {
-        cat = 'email';
-        catLabel = 'Courriel';
-      } else if (f.name.toLowerCase().includes('reunion') || f.name.toLowerCase().includes('transcript') || f.name.toLowerCase().includes('cr_') || f.name.toLowerCase().includes('meeting')) {
-        cat = 'meeting';
-        catLabel = 'Compte-rendu Réunion';
-      } else if (f.name.toLowerCase().includes('ticket') || f.name.match(/^[A-Z]{3,4}-\d+/)) {
-        cat = 'ticket';
-        catLabel = 'Billet de soutien';
-      } else if (f.name.toLowerCase().includes('facture') || f.name.toLowerCase().includes('contrat') || f.name.toLowerCase().includes('inv-') || f.name.toLowerCase().includes('cr-')) {
-        cat = 'contract_finance';
-        catLabel = 'Contrat & Finances';
-      } else if (f.name.toLowerCase().includes('adr') || f.name.toLowerCase().includes('archi')) {
-        cat = 'architecture';
-        catLabel = 'Architecture & ADR';
-      } else if (f.name.toLowerCase().includes('teams') || f.name.toLowerCase().includes('slack')) {
-        cat = 'teams';
-        catLabel = 'Discussion Teams';
+    const newDocs: ProjectDocument[] = rawList.map((f: any, idx: number) => {
+      if (f.id && f.category && f.formattedContent) {
+        return f as ProjectDocument;
       }
-
-      return {
-        id: 'USER-' + Date.now().toString().slice(-4) + '-' + idx,
-        name: f.name || `Document_${idx + 1}.${ext}`,
-        category: cat,
-        categoryLabel: catLabel,
-        date: f.date || new Date().toISOString().slice(0, 10),
-        author: f.author || 'Utilisateur',
-        summary: f.summary || f.content?.slice(0, 180) + '...',
-        content: f.content || '',
-        tags: ['Fichier Importé', ext.toUpperCase()],
-        fileType: ext,
-        relevanceStatus: 'valid'
-      };
+      return processFileIntoDocument(
+        { name: f.name || `Document_${idx + 1}.txt`, lastModified: f.lastModified || Date.now() },
+        f.content || '',
+        idx + 1
+      );
     });
 
     currentDocuments = [...newDocs, ...currentDocuments];

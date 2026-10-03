@@ -20,6 +20,7 @@ import {
   Loader2
 } from 'lucide-react';
 import { ProjectAnalysis, ProjectDocument } from '../types/project';
+import { parseUploadedFiles } from '../utils/folderParser';
 
 interface DocumentManagerProps {
   documents: ProjectDocument[];
@@ -70,29 +71,21 @@ export const DocumentManager: React.FC<DocumentManagerProps> = ({
     if (!files || files.length === 0) return;
 
     setIsUploading(true);
-    const parsedFiles: { name: string; content: string; date: string; author: string }[] = [];
-
-    for (let i = 0; i < files.length; i++) {
-      const file = files[i];
-      const text = await file.text();
-      parsedFiles.push({
-        name: file.name,
-        content: text,
-        date: new Date().toISOString().slice(0, 10),
-        author: 'Téléversé par l\'utilisateur'
-      });
-    }
 
     try {
+      const parsedDocs = await parseUploadedFiles(files);
+      
       const response = await fetch('/api/ingest-files', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ files: parsedFiles })
+        body: JSON.stringify({ documents: parsedDocs })
       });
 
       const data = await response.json();
       if (response.ok && data.addedDocuments) {
         onDocumentsAdded(data.addedDocuments);
+      } else {
+        onDocumentsAdded(parsedDocs);
       }
     } catch (err: any) {
       alert(`Erreur d'ingestion : ${err.message}`);
@@ -119,29 +112,21 @@ export const DocumentManager: React.FC<DocumentManagerProps> = ({
 
     if (e.dataTransfer.files && e.dataTransfer.files.length > 0) {
       setIsUploading(true);
-      const parsedFiles: { name: string; content: string; date: string; author: string }[] = [];
-
-      for (let i = 0; i < e.dataTransfer.files.length; i++) {
-        const file = e.dataTransfer.files[i];
-        const text = await file.text();
-        parsedFiles.push({
-          name: file.name,
-          content: text,
-          date: new Date().toISOString().slice(0, 10),
-          author: 'Glissé-déposé par l\'utilisateur'
-        });
-      }
 
       try {
+        const parsedDocs = await parseUploadedFiles(e.dataTransfer.files);
+        
         const response = await fetch('/api/ingest-files', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ files: parsedFiles })
+          body: JSON.stringify({ documents: parsedDocs })
         });
 
         const data = await response.json();
         if (response.ok && data.addedDocuments) {
           onDocumentsAdded(data.addedDocuments);
+        } else {
+          onDocumentsAdded(parsedDocs);
         }
       } catch (err: any) {
         alert(`Erreur d'ingestion : ${err.message}`);
