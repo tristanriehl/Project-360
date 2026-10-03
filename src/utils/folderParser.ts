@@ -1,6 +1,5 @@
 import { ProjectDocument } from '../types/project';
 import { cleanUtfString } from './cleanUtf';
-import { readPdfFile, readExcelFile } from './documentFileReader';
 
 /**
  * Decodes RFC 2047 MIME encoded words (e.g. =?UTF-8?B?...?= or =?UTF-8?Q?...?= or =?ISO-8859-1?Q?...?=)
@@ -422,35 +421,21 @@ export async function parseUploadedFiles(fileList: File[] | FileList): Promise<P
 }
 
 /**
- * Reads text content from a File object supporting PDF, Excel, EML, CSV and Text formats.
+ * Reads text content from a File object.
  */
-export async function readFileContent(file: File): Promise<string> {
-  const nameLower = file.name.toLowerCase();
-  const ext = nameLower.split('.').pop() || '';
-
-  // 1. PDF Files
-  if (ext === 'pdf' || nameLower.includes('.pdf')) {
-    return await readPdfFile(file);
-  }
-
-  // 2. Excel & Spreadsheet Files (.xlsx, .xls, .csv, .tsv)
-  if (ext === 'xlsx' || ext === 'xls' || ext === 'csv' || ext === 'tsv' || nameLower.includes('.xlsx') || nameLower.includes('.xls')) {
-    return await readExcelFile(file);
-  }
-
-  // 3. Plain Text, EML, JSON, MD, Log, XML, HTML, etc.
+function readFileContent(file: File): Promise<string> {
   return new Promise((resolve) => {
     const reader = new FileReader();
 
     reader.onload = (event) => {
       const content = event.target?.result;
       if (typeof content === 'string') {
-        resolve(cleanUtfString(content));
+        resolve(content);
       } else if (content instanceof ArrayBuffer) {
         const uint8Array = new Uint8Array(content);
         const decoder = new TextDecoder('utf-8', { fatal: false });
         const decoded = decoder.decode(uint8Array);
-        const cleaned = cleanUtfString(decoded.replace(/[\x00-\x08\x0B\x0C\x0E-\x1F]/g, ' ')).slice(0, 250000);
+        const cleaned = decoded.replace(/[\x00-\x08\x0B\x0C\x0E-\x1F]/g, ' ').slice(0, 200000);
         resolve(cleaned);
       } else {
         resolve(`[Fichier ${file.name} - ${file.size} octets]`);
@@ -521,19 +506,13 @@ export function processFileIntoDocument(file: { name: string; lastModified?: num
     categoryLabel = 'Architecture (ADR)';
     summary = `Décision d'architecture : ${fileName}`;
   }
-  // 5. Contracts & Finance / Excel
-  else if (ext === 'xlsx' || ext === 'xls' || ext === 'csv' || ext === 'tsv' || lowerName.includes('facture') || lowerName.includes('contrat') || lowerName.includes('budget') || lowerName.includes('devis') || lowerName.includes('finance') || lowerName.includes('inv-') || lowerName.includes('cr-')) {
+  // 5. Contracts & Finance
+  else if (lowerName.includes('facture') || lowerName.includes('contrat') || lowerName.includes('budget') || lowerName.includes('devis') || lowerName.includes('finance') || lowerName.includes('inv-') || lowerName.includes('cr-')) {
     category = 'contract_finance';
-    categoryLabel = (ext === 'xlsx' || ext === 'xls' || ext === 'csv') ? 'Tableur Excel' : 'Contrat & Finances';
-    summary = `Pièce comptable / tableur : ${fileName}`;
+    categoryLabel = 'Contrat & Finances';
+    summary = `Pièce comptable / contractuelle : ${fileName}`;
   }
-  // 6. PDF Documents
-  else if (ext === 'pdf') {
-    category = 'project_doc';
-    categoryLabel = 'Document PDF';
-    summary = `Document PDF : ${fileName}`;
-  }
-  // 7. Teams / Chat
+  // 6. Teams / Chat
   else if (lowerName.includes('teams') || lowerName.includes('chat') || lowerName.includes('slack')) {
     category = 'teams';
     categoryLabel = 'Discussion Teams';
