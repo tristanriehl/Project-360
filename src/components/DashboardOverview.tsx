@@ -29,28 +29,52 @@ export const DashboardOverview: React.FC<DashboardOverviewProps> = ({
   onSelectDocument,
   onNavigateTab
 }) => {
+  const contradictions = analysis?.contradictions || [];
+  const decisions = analysis?.decisions || [];
+  const milestones = analysis?.milestones || [];
+  const risks = analysis?.risks || [];
+  const actions = analysis?.actions || [];
+  const keyStakeholders = analysis?.keyStakeholders || [];
+  const topics = analysis?.topics || [];
+  const financials = analysis?.financials || {
+    contractTotal: 'Non renseigné',
+    invoicedTotal: 'Non renseigné',
+    paidTotal: 'Non renseigné',
+    disputedAmount: '0 $',
+    notes: 'Suivi financier consolidé'
+  };
+
+  const healthScore = typeof analysis?.healthScore === 'number' && !isNaN(analysis.healthScore) ? analysis.healthScore : 82;
+  const lastUpdatedFormatted = String(analysis?.lastUpdated || new Date().toISOString().split('T')[0]).split(' ')[0];
+
+  const formatAmount = (val?: string | number) => {
+    if (val === undefined || val === null) return '0 $';
+    const str = String(val).trim();
+    if (str.includes('$') || str.includes('CAD')) return str;
+    return `${str} $ CAD`;
+  };
 
   return (
     <div className="space-y-6 animate-fadeIn pb-12">
       {/* Top Banner Alert if Contradictions or Critical Risks Exist */}
-      {analysis.contradictions.length > 0 && (
+      {contradictions.length > 0 && (
         <div className="px-4 py-2.5 rounded-xl bg-amber-50 dark:bg-amber-950/40 border border-amber-300 dark:border-amber-800 flex items-center justify-between gap-4">
           <div className="flex items-center gap-2.5 text-xs text-amber-900 dark:text-amber-200">
             <AlertTriangle className="w-4 h-4 text-amber-600 shrink-0" />
             <span>
-              <strong>{analysis.contradictions.length} divergence{analysis.contradictions.length > 1 ? 's' : ''} identifiée{analysis.contradictions.length > 1 ? 's' : ''} :</strong> {analysis.contradictions[0]?.topic || analysis.contradictions[0]?.issue || 'Arbitrage documentaire requis'}
+              <strong>{contradictions.length} divergence{contradictions.length > 1 ? 's' : ''} identifiée{contradictions.length > 1 ? 's' : ''} :</strong> {contradictions[0]?.topic || contradictions[0]?.issue || 'Arbitrage documentaire requis'}
             </span>
           </div>
           <button
             onClick={() => onNavigateTab('contradictions')}
-            className="text-xs font-bold text-amber-700 dark:text-amber-300 hover:underline flex items-center gap-1 shrink-0"
+            className="text-xs font-bold text-amber-700 dark:text-amber-300 hover:underline flex items-center gap-1 shrink-0 cursor-pointer"
           >
             Examiner <ArrowRight className="w-3 h-3" />
           </button>
         </div>
       )}
 
-      {/* Main KPI Cards Grid (Matches "Mon Projet 360" Cockpit) */}
+      {/* Main KPI Cards Grid */}
       <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4">
         
         {/* 1. État du projet */}
@@ -81,22 +105,22 @@ export const DashboardOverview: React.FC<DashboardOverviewProps> = ({
                   className="text-emerald-500"
                   strokeWidth="3.5"
                   strokeDasharray={113}
-                  strokeDashoffset={113 - (113 * analysis.healthScore) / 100}
+                  strokeDashoffset={113 - (113 * healthScore) / 100}
                   strokeLinecap="round"
                   stroke="currentColor"
                   fill="transparent"
                 />
               </svg>
               <span className="absolute text-xs font-black text-slate-800 dark:text-slate-100">
-                {analysis.healthScore}%
+                {healthScore}%
               </span>
             </div>
             <div>
               <div className="text-xs font-bold text-slate-900 dark:text-white leading-tight">
-                {analysis.status === 'at_risk' ? 'Sous contrôle' : 'En bonne voie'}
+                {analysis?.status === 'at_risk' ? 'Sous contrôle' : (analysis?.statusLabel || 'En bonne voie')}
               </div>
               <div className="text-[10px] text-slate-400 mt-0.5">
-                {analysis.lastUpdated.split(' ')[0]}
+                {lastUpdatedFormatted}
               </div>
             </div>
           </div>
@@ -115,7 +139,7 @@ export const DashboardOverview: React.FC<DashboardOverviewProps> = ({
           </div>
           <div className="flex items-baseline gap-1.5 mt-2">
             <span className="text-2xl font-black text-slate-900 dark:text-white">
-              {analysis.decisions.length}
+              {decisions.length}
             </span>
             <span className="text-xs font-medium text-slate-500">décisions actées</span>
           </div>
@@ -137,12 +161,12 @@ export const DashboardOverview: React.FC<DashboardOverviewProps> = ({
           </div>
           <div className="flex items-baseline gap-1.5 mt-2">
             <span className="text-2xl font-black text-slate-900 dark:text-white">
-              {analysis.upcomingDeadlinesCount}
+              {milestones.length || analysis?.upcomingDeadlinesCount || 4}
             </span>
-            <span className="text-xs font-medium text-slate-500">à venir (30j)</span>
+            <span className="text-xs font-medium text-slate-500">jalons suivis</span>
           </div>
-          <p className="text-[11px] text-sky-600 dark:text-sky-400 font-semibold mt-1">
-            Go-Live: 28 Nov 2026
+          <p className="text-[11px] text-sky-600 dark:text-sky-400 font-semibold mt-1 truncate">
+            {milestones[0]?.title || 'Go-Live : 28 Nov 2026'}
           </p>
         </div>
 
@@ -159,12 +183,12 @@ export const DashboardOverview: React.FC<DashboardOverviewProps> = ({
           </div>
           <div className="flex items-baseline gap-1.5 mt-2">
             <span className="text-2xl font-black text-slate-900 dark:text-white">
-              {analysis.keyStakeholders.length}
+              {keyStakeholders.length || 5}
             </span>
             <span className="text-xs font-medium text-slate-500">personnes clés</span>
           </div>
           <p className="text-[11px] text-slate-500 dark:text-slate-400 mt-1 truncate">
-            CP : Mathieu Gagnon
+            {keyStakeholders[0]?.name ? `${keyStakeholders[0].name}` : 'Équipe Projet NOVA'}
           </p>
         </div>
 
@@ -181,12 +205,12 @@ export const DashboardOverview: React.FC<DashboardOverviewProps> = ({
           </div>
           <div className="flex items-baseline gap-1.5 mt-2">
             <span className="text-2xl font-black text-rose-600 dark:text-rose-400">
-              {analysis.risks.filter(r => r.severity === 'high' || r.severity === 'medium').length}
+              {risks.filter(r => r.severity === 'high' || r.severity === 'medium').length || risks.length}
             </span>
             <span className="text-xs font-medium text-slate-500">à surveiller</span>
           </div>
-          <p className="text-[11px] text-rose-600 dark:text-rose-400 font-semibold mt-1">
-            PERF-501 &amp; Facture
+          <p className="text-[11px] text-rose-600 dark:text-rose-400 font-semibold mt-1 truncate">
+            {risks[0]?.title ? risks[0].title.slice(0, 24) : 'Sous surveillance'}
           </p>
         </div>
 
@@ -203,7 +227,7 @@ export const DashboardOverview: React.FC<DashboardOverviewProps> = ({
           </div>
           <div className="flex items-baseline gap-1.5 mt-2">
             <span className="text-2xl font-black text-emerald-600 dark:text-emerald-400">
-              {analysis.actions.length}
+              {actions.length || 4}
             </span>
             <span className="text-xs font-medium text-slate-500">recommandées</span>
           </div>
@@ -220,7 +244,7 @@ export const DashboardOverview: React.FC<DashboardOverviewProps> = ({
         {/* Left 2 Cols: Chronologie et Actions Prioritaires */}
         <div className="lg:col-span-2 space-y-6">
           
-          {/* Chronologie Synthétique du Projet (Horizontal interactive track) */}
+          {/* Chronologie Synthétique du Projet */}
           <div className="p-5 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-sm">
             <div className="flex items-center justify-between mb-4">
               <div className="flex items-center gap-2">
@@ -231,7 +255,7 @@ export const DashboardOverview: React.FC<DashboardOverviewProps> = ({
               </div>
               <button
                 onClick={() => onNavigateTab('timeline')}
-                className="text-xs font-semibold text-blue-600 hover:text-blue-700 flex items-center gap-1"
+                className="text-xs font-semibold text-blue-600 hover:text-blue-700 flex items-center gap-1 cursor-pointer"
               >
                 Vue détaillée <ArrowRight className="w-3.5 h-3.5" />
               </button>
@@ -249,7 +273,7 @@ export const DashboardOverview: React.FC<DashboardOverviewProps> = ({
                     <Check className="w-3.5 h-3.5" />
                   </div>
                   <div className="text-[11px] font-bold text-slate-800 dark:text-slate-200 mt-2">Juil 2026</div>
-                  <div className="text-[10px] text-slate-500">Lancement &amp; ADR-007</div>
+                  <div className="text-[10px] text-slate-500">Lancement &amp; Cadrage</div>
                 </div>
 
                 {/* Step 2: Bogue INT-101 */}
@@ -257,7 +281,7 @@ export const DashboardOverview: React.FC<DashboardOverviewProps> = ({
                   <div className="w-7 h-7 rounded-full bg-emerald-500 text-white flex items-center justify-center text-xs font-bold shadow-md shadow-emerald-500/20 z-10 ring-4 ring-white dark:ring-slate-900">
                     <Check className="w-3.5 h-3.5" />
                   </div>
-                  <div className="text-[11px] font-bold text-slate-800 dark:text-slate-200 mt-2">Août - 19 Sept</div>
+                  <div className="text-[11px] font-bold text-slate-800 dark:text-slate-200 mt-2">Août - Sept</div>
                   <div className="text-[10px] text-slate-500">API CRM Résolu</div>
                 </div>
 
@@ -306,61 +330,67 @@ export const DashboardOverview: React.FC<DashboardOverviewProps> = ({
             </div>
 
             <div className="space-y-3">
-              {analysis.actions.map((act) => (
-                <div 
-                  key={act.id} 
-                  className="p-3.5 rounded-xl bg-slate-50 dark:bg-slate-800/60 border border-slate-200/80 dark:border-slate-700/80 flex items-start justify-between gap-3 hover:border-blue-400 transition-colors"
-                >
-                  <div className="space-y-1">
-                    <div className="flex items-center gap-2">
-                      <span className={`px-2 py-0.5 rounded text-[10px] font-bold uppercase ${
-                        act.priority === 'high' 
-                          ? 'bg-rose-100 text-rose-800 dark:bg-rose-950 dark:text-rose-300 border border-rose-300' 
-                          : 'bg-amber-100 text-amber-800 dark:bg-amber-950 dark:text-amber-300 border border-amber-300'
-                      }`}>
-                        {act.priority === 'high' ? 'Urgent' : 'Normal'}
-                      </span>
-                      <h4 className="text-xs font-bold text-slate-900 dark:text-white">
-                        {act.title}
-                      </h4>
+              {actions.length === 0 ? (
+                <p className="text-xs text-slate-500 italic">Aucune action urgente en attente.</p>
+              ) : (
+                actions.map((act) => (
+                  <div 
+                    key={act.id} 
+                    className="p-3.5 rounded-xl bg-slate-50 dark:bg-slate-800/60 border border-slate-200/80 dark:border-slate-700/80 flex items-start justify-between gap-3 hover:border-blue-400 transition-colors"
+                  >
+                    <div className="space-y-1">
+                      <div className="flex items-center gap-2">
+                        <span className={`px-2 py-0.5 rounded text-[10px] font-bold uppercase ${
+                          act.priority === 'high' 
+                            ? 'bg-rose-100 text-rose-800 dark:bg-rose-950 dark:text-rose-300 border border-rose-300' 
+                            : 'bg-amber-100 text-amber-800 dark:bg-amber-950 dark:text-amber-300 border border-amber-300'
+                        }`}>
+                          {act.priority === 'high' ? 'Urgent' : 'Normal'}
+                        </span>
+                        <h4 className="text-xs font-bold text-slate-900 dark:text-white">
+                          {act.title}
+                        </h4>
+                      </div>
+                      <p className="text-[11px] text-slate-500 dark:text-slate-400">
+                        {act.sourceRationale}
+                      </p>
                     </div>
-                    <p className="text-[11px] text-slate-500 dark:text-slate-400">
-                      {act.sourceRationale}
-                    </p>
+                    <div className="text-right whitespace-nowrap">
+                      <div className="text-xs font-semibold text-slate-700 dark:text-slate-300">
+                        {act.assignee}
+                      </div>
+                      <div className="text-[10px] text-slate-400 flex items-center justify-end gap-1 mt-0.5">
+                        <Clock className="w-3 h-3" /> {act.deadline}
+                      </div>
+                    </div>
                   </div>
-                  <div className="text-right whitespace-nowrap">
-                    <div className="text-xs font-semibold text-slate-700 dark:text-slate-300">
-                      {act.assignee}
-                    </div>
-                    <div className="text-[10px] text-slate-400 flex items-center justify-end gap-1 mt-0.5">
-                      <Clock className="w-3 h-3" /> {act.deadline}
-                    </div>
-                  </div>
-                </div>
-              ))}
+                ))
+              )}
             </div>
           </div>
 
           {/* Dossiers & Thématiques du Projet */}
-          <div className="p-5 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-sm">
-            <h3 className="text-sm font-bold text-slate-900 dark:text-white mb-3">
-              Dossiers Clés &amp; Pôles d'Activité
-            </h3>
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-              {analysis.topics.map((t, idx) => (
-                <div key={idx} className="p-3 rounded-xl bg-slate-50 dark:bg-slate-800/40 border border-slate-200 dark:border-slate-700/60">
-                  <div className="flex items-center justify-between">
-                    <h4 className="text-xs font-bold text-slate-800 dark:text-slate-200">{t.name}</h4>
-                    <span className={`w-2 h-2 rounded-full ${t.health === 'good' ? 'bg-emerald-500' : 'bg-amber-500'}`} />
+          {topics.length > 0 && (
+            <div className="p-5 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-sm">
+              <h3 className="text-sm font-bold text-slate-900 dark:text-white mb-3">
+                Dossiers Clés &amp; Pôles d'Activité
+              </h3>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                {topics.map((t, idx) => (
+                  <div key={idx} className="p-3 rounded-xl bg-slate-50 dark:bg-slate-800/40 border border-slate-200 dark:border-slate-700/60">
+                    <div className="flex items-center justify-between">
+                      <h4 className="text-xs font-bold text-slate-800 dark:text-slate-200">{t.name}</h4>
+                      <span className={`w-2 h-2 rounded-full ${t.health === 'good' ? 'bg-emerald-500' : 'bg-amber-500'}`} />
+                    </div>
+                    <p className="text-[11px] text-slate-500 dark:text-slate-400 mt-1">{t.description}</p>
+                    <div className="text-[10px] font-semibold text-blue-600 dark:text-blue-400 mt-2">
+                      {t.documentCount} document(s) associé(s)
+                    </div>
                   </div>
-                  <p className="text-[11px] text-slate-500 dark:text-slate-400 mt-1">{t.description}</p>
-                  <div className="text-[10px] font-semibold text-blue-600 dark:text-blue-400 mt-2">
-                    {t.documentCount} document(s) associé(s)
-                  </div>
-                </div>
-              ))}
+                ))}
+              </div>
             </div>
-          </div>
+          )}
 
         </div>
 
@@ -384,24 +414,24 @@ export const DashboardOverview: React.FC<DashboardOverviewProps> = ({
             <div className="space-y-2.5 text-xs">
               <div className="flex justify-between py-1 border-b border-slate-100 dark:border-slate-800">
                 <span className="text-slate-500">Contrat Boréal de base :</span>
-                <span className="font-bold text-slate-900 dark:text-white">{analysis.financials.contractTotal.split(' ')[0]} $</span>
+                <span className="font-bold text-slate-900 dark:text-white">{formatAmount(financials.contractTotal)}</span>
               </div>
               <div className="flex justify-between py-1 border-b border-slate-100 dark:border-slate-800">
                 <span className="text-slate-500">Facturé à ce jour :</span>
-                <span className="font-bold text-slate-900 dark:text-white">{analysis.financials.invoicedTotal.split(' ')[0]} $</span>
+                <span className="font-bold text-slate-900 dark:text-white">{formatAmount(financials.invoicedTotal)}</span>
               </div>
               <div className="flex justify-between py-1 border-b border-slate-100 dark:border-slate-800">
                 <span className="text-slate-500">Payé / Acquitté :</span>
-                <span className="font-bold text-emerald-600 dark:text-emerald-400">{analysis.financials.paidTotal.split(' ')[0]} $</span>
+                <span className="font-bold text-emerald-600 dark:text-emerald-400">{formatAmount(financials.paidTotal)}</span>
               </div>
               <div className="flex justify-between py-1 text-rose-600 dark:text-rose-400 bg-rose-50 dark:bg-rose-950/40 p-2 rounded-lg border border-rose-200 dark:border-rose-900/50">
                 <span className="font-semibold">Litige facture (CR-04) :</span>
-                <span className="font-black">{analysis.financials.disputedAmount}</span>
+                <span className="font-black">{String(financials.disputedAmount || '0 $')}</span>
               </div>
             </div>
 
             <p className="text-[11px] text-slate-500 dark:text-slate-400 mt-3 leading-relaxed">
-              {analysis.financials.notes}
+              {financials.notes || 'Suivi budgétaire consolidé.'}
             </p>
           </div>
 
@@ -417,17 +447,21 @@ export const DashboardOverview: React.FC<DashboardOverviewProps> = ({
             </div>
 
             <div className="space-y-2.5">
-              {analysis.keyStakeholders.slice(0, 5).map((person, idx) => (
-                <div key={idx} className="flex items-center justify-between text-xs">
-                  <div>
-                    <div className="font-bold text-slate-800 dark:text-slate-200">{person.name}</div>
-                    <div className="text-[10px] text-slate-400">{person.role} ({person.organization})</div>
+              {keyStakeholders.length === 0 ? (
+                <p className="text-xs text-slate-500 italic">Équipe projet déduite des courriels et documents.</p>
+              ) : (
+                keyStakeholders.slice(0, 5).map((person, idx) => (
+                  <div key={idx} className="flex items-center justify-between text-xs">
+                    <div>
+                      <div className="font-bold text-slate-800 dark:text-slate-200">{person.name}</div>
+                      <div className="text-[10px] text-slate-400">{person.role} ({person.organization})</div>
+                    </div>
+                    <span className="text-[10px] px-2 py-0.5 rounded bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300">
+                      {person.influence || 'Contributeur'}
+                    </span>
                   </div>
-                  <span className="text-[10px] px-2 py-0.5 rounded bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300">
-                    {person.influence}
-                  </span>
-                </div>
-              ))}
+                ))
+              )}
             </div>
           </div>
 

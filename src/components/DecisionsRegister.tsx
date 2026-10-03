@@ -10,18 +10,21 @@ interface DecisionsRegisterProps {
 
 export const DecisionsRegister: React.FC<DecisionsRegisterProps> = ({
   analysis,
-  documents,
+  documents = [],
   onSelectDocument
 }) => {
   const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState<string>('all');
 
-  const filteredDecisions = analysis.decisions.filter(d => {
+  const decisionsList = analysis?.decisions || [];
+
+  const filteredDecisions = decisionsList.filter(d => {
     if (statusFilter !== 'all' && d.status !== statusFilter) return false;
     if (search.trim()) {
-      const match = d.title.toLowerCase().includes(search.toLowerCase()) ||
-                    d.rationale.toLowerCase().includes(search.toLowerCase()) ||
-                    d.owner.toLowerCase().includes(search.toLowerCase());
+      const q = search.toLowerCase();
+      const match = (d.title || '').toLowerCase().includes(q) ||
+                    (d.rationale || '').toLowerCase().includes(q) ||
+                    (d.owner || '').toLowerCase().includes(q);
       if (!match) return false;
     }
     return true;

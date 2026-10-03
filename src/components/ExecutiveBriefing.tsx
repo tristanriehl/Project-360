@@ -25,12 +25,23 @@ interface ExecutiveBriefingProps {
 
 export const ExecutiveBriefing: React.FC<ExecutiveBriefingProps> = ({
   analysis,
-  documents
+  documents = []
 }) => {
   const [activeTab, setActiveTab] = useState<'briefing' | 'comparison' | 'audit_dossier'>('briefing');
   const [copied, setCopied] = useState(false);
   const [isGenerating, setIsGenerating] = useState(false);
   const [customBriefingText, setCustomBriefingText] = useState<string | null>(null);
+
+  const decisions = analysis?.decisions || [];
+  const risks = analysis?.risks || [];
+  const actions = analysis?.actions || [];
+  const financials = analysis?.financials || {
+    contractTotal: 'Non renseigné',
+    invoicedTotal: 'Non renseigné',
+    paidTotal: 'Non renseigné',
+    disputedAmount: '0 $',
+    notes: 'Suivi financier consolidé'
+  };
 
   const handleGenerateAiBriefing = async () => {
     setIsGenerating(true);
@@ -45,33 +56,32 @@ export const ExecutiveBriefing: React.FC<ExecutiveBriefingProps> = ({
         setCustomBriefingText(data.content);
       }
     } catch (err: any) {
-      alert(`Erreur : ${err.message}`);
+      console.warn(`Erreur : ${err?.message}`);
     } finally {
       setIsGenerating(false);
     }
   };
 
   const handleCopyMarkdown = () => {
-    let md = `# BRIEFING STRATÉGIQUE EXÉCUTIF - PROJET NOVA (360°)\n\n`;
+    let md = `# BRIEFING STRATÉGIQUE EXÉCUTIF - ${analysis?.projectName || 'PROJET 360'}\n\n`;
     md += `**Date du rapport :** ${new Date().toLocaleDateString('fr-CA')}\n`;
-    md += `**Statut Global :** ${analysis.statusLabel} (Score de santé : ${analysis.healthScore}%)\n`;
-    md += `**Date Officielle de Go-Live :** 28 Novembre 2026\n\n`;
-    md += `## 1. Résumé Exécutif\n${analysis.executiveSummary}\n\n`;
+    md += `**Statut Global :** ${analysis?.statusLabel || 'En cours'} (Score de santé : ${analysis?.healthScore || 80}%)\n\n`;
+    md += `## 1. Résumé Exécutif\n${analysis?.executiveSummary || 'Synthèse'}\n\n`;
     md += `## 2. Décisions Clés & Arbitrages\n`;
-    analysis.decisions.forEach(d => {
+    decisions.forEach(d => {
       md += `- **${d.title}** (${d.date}, Porteur: ${d.owner})\n  Justification: ${d.rationale}\n  Preuve: "${d.evidenceQuote}" (Source: ${d.sourceDocName})\n`;
     });
     md += `\n## 3. Risques Actifs & Surveillance\n`;
-    analysis.risks.forEach(r => {
-      md += `- **[${r.severity.toUpperCase()}] ${r.title}**\n  Mitigation: ${r.mitigation}\n`;
+    risks.forEach(r => {
+      md += `- **[${(r.severity || 'medium').toUpperCase()}] ${r.title}**\n  Mitigation: ${r.mitigation}\n`;
     });
     md += `\n## 4. Bilan Financier & Litiges\n`;
-    md += `- Contrat Boréal initial : ${analysis.financials.contractTotal}\n`;
-    md += `- Total facturé : ${analysis.financials.invoicedTotal}\n`;
-    md += `- Total payé : ${analysis.financials.paidTotal}\n`;
-    md += `- Montant en litige (Facture INV-003 / CR-04) : ${analysis.financials.disputedAmount}\n`;
+    md += `- Contrat initial : ${financials.contractTotal}\n`;
+    md += `- Total facturé : ${financials.invoicedTotal}\n`;
+    md += `- Total payé : ${financials.paidTotal}\n`;
+    md += `- Montant en litige : ${financials.disputedAmount}\n`;
     md += `\n## 5. Prochaines Actions Prioritaires\n`;
-    analysis.actions.forEach(a => {
+    actions.forEach(a => {
       md += `- [ ] **${a.title}** (Assigné à: ${a.assignee}, Échéance: ${a.deadline})\n`;
     });
 

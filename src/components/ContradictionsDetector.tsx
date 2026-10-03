@@ -10,10 +10,13 @@ interface ContradictionsDetectorProps {
 
 export const ContradictionsDetector: React.FC<ContradictionsDetectorProps> = ({
   analysis,
-  documents,
+  documents = [],
   onSelectDocument
 }) => {
-  const findDoc = (name: string) => {
+  const contradictions = analysis?.contradictions || [];
+
+  const findDoc = (name?: string) => {
+    if (!name) return undefined;
     return documents.find(d => d.name.toLowerCase().includes(name.toLowerCase()));
   };
 
@@ -34,102 +37,112 @@ export const ContradictionsDetector: React.FC<ContradictionsDetectorProps> = ({
         </div>
 
         <span className="px-2.5 py-1 rounded-full text-xs font-bold bg-rose-100 text-rose-800 dark:bg-rose-950 dark:text-rose-300 border border-rose-200 dark:border-rose-800">
-          {analysis.contradictions.length} détectées
+          {contradictions.length} détectée{contradictions.length > 1 ? 's' : ''}
         </span>
       </div>
 
       {/* Contradictions List */}
       <div className="space-y-4">
-        {analysis.contradictions.map((item, idx) => {
-          const docA = findDoc(item.sourceA.docName);
-          const docB = findDoc(item.sourceB.docName);
+        {contradictions.length === 0 ? (
+          <div className="p-8 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 text-center space-y-2">
+            <CheckCircle2 className="w-8 h-8 text-emerald-500 mx-auto" />
+            <h3 className="text-sm font-bold text-slate-900 dark:text-white">Aucune contradiction détectée</h3>
+            <p className="text-xs text-slate-500">Toutes les pièces documentaires sont cohérentes entre elles.</p>
+          </div>
+        ) : (
+          contradictions.map((item, idx) => {
+            const docAName = item?.sourceA?.docName || 'Document source A';
+            const docBName = item?.sourceB?.docName || 'Document source B';
+            const docA = findDoc(docAName);
+            const docB = findDoc(docBName);
 
-          return (
-            <div
-              key={item.id}
-              className="p-5 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-sm space-y-4"
-            >
-              {/* Header */}
-              <div className="flex items-center justify-between">
-                <div className="flex items-center gap-2">
-                  <span className="w-6 h-6 rounded-lg bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 font-mono text-xs font-bold flex items-center justify-center">
-                    {idx + 1}
+            return (
+              <div
+                key={item.id || `contr-${idx}`}
+                className="p-5 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-sm space-y-4"
+              >
+                {/* Header */}
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <span className="w-6 h-6 rounded-lg bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 font-mono text-xs font-bold flex items-center justify-center">
+                      {idx + 1}
+                    </span>
+                    <h3 className="text-sm font-bold text-slate-900 dark:text-white">
+                      {item.topic || 'Divergence documentaire'}
+                    </h3>
+                  </div>
+                  <span className="text-[11px] font-semibold text-rose-600 dark:text-rose-400">
+                    Divergence
                   </span>
-                  <h3 className="text-sm font-bold text-slate-900 dark:text-white">
-                    {item.topic}
-                  </h3>
                 </div>
-                <span className="text-[11px] font-semibold text-rose-600 dark:text-rose-400">
-                  Divergence
-                </span>
-              </div>
 
-              <p className="text-xs text-slate-600 dark:text-slate-300">
-                {item.issue}
-              </p>
+                <p className="text-xs text-slate-600 dark:text-slate-300">
+                  {item.issue || 'Écart relevé entre deux versions de documents.'}
+                </p>
 
-              {/* Side-by-Side Sources */}
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-3 text-xs">
-                
-                {/* Source A */}
-                <div className="p-3 rounded-xl bg-slate-50 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700 space-y-1.5">
-                  <div className="flex items-center justify-between text-[11px] text-slate-500">
-                    <span className="flex items-center gap-1 font-semibold text-slate-700 dark:text-slate-300">
-                      <XCircle className="w-3.5 h-3.5 text-amber-500" /> {item.sourceA.docName}
-                    </span>
-                    <span>{item.sourceA.date}</span>
+                {/* Side-by-Side Sources */}
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-3 text-xs">
+                  
+                  {/* Source A */}
+                  <div className="p-3 rounded-xl bg-slate-50 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700 space-y-1.5">
+                    <div className="flex items-center justify-between text-[11px] text-slate-500">
+                      <span className="flex items-center gap-1 font-semibold text-slate-700 dark:text-slate-300">
+                        <XCircle className="w-3.5 h-3.5 text-amber-500" /> {docAName}
+                      </span>
+                      <span>{item?.sourceA?.date || ''}</span>
+                    </div>
+                    <p className="font-mono text-[11px] text-slate-700 dark:text-slate-300 italic bg-white dark:bg-slate-900 p-2 rounded border border-slate-200 dark:border-slate-800">
+                      "{item?.sourceA?.statement || 'Version initiale'}"
+                    </p>
+                    {docA && (
+                      <button
+                        onClick={() => onSelectDocument(docA)}
+                        className="text-[10px] font-semibold text-blue-600 hover:underline flex items-center gap-0.5 cursor-pointer"
+                      >
+                        Voir le document <ExternalLink className="w-2.5 h-2.5" />
+                      </button>
+                    )}
                   </div>
-                  <p className="font-mono text-[11px] text-slate-700 dark:text-slate-300 italic bg-white dark:bg-slate-900 p-2 rounded border border-slate-200 dark:border-slate-800">
-                    "{item.sourceA.statement}"
-                  </p>
-                  {docA && (
-                    <button
-                      onClick={() => onSelectDocument(docA)}
-                      className="text-[10px] font-semibold text-blue-600 hover:underline flex items-center gap-0.5"
-                    >
-                      Voir le document <ExternalLink className="w-2.5 h-2.5" />
-                    </button>
-                  )}
-                </div>
 
-                {/* Source B */}
-                <div className="p-3 rounded-xl bg-blue-50/50 dark:bg-blue-950/20 border border-blue-200/60 dark:border-blue-900/40 space-y-1.5">
-                  <div className="flex items-center justify-between text-[11px] text-blue-800 dark:text-blue-300">
-                    <span className="flex items-center gap-1 font-semibold">
-                      <CheckCircle2 className="w-3.5 h-3.5 text-emerald-500" /> {item.sourceB.docName}
-                    </span>
-                    <span>{item.sourceB.date}</span>
+                  {/* Source B */}
+                  <div className="p-3 rounded-xl bg-blue-50/50 dark:bg-blue-950/20 border border-blue-200/60 dark:border-blue-900/40 space-y-1.5">
+                    <div className="flex items-center justify-between text-[11px] text-blue-800 dark:text-blue-300">
+                      <span className="flex items-center gap-1 font-semibold">
+                        <CheckCircle2 className="w-3.5 h-3.5 text-emerald-500" /> {docBName}
+                      </span>
+                      <span>{item?.sourceB?.date || ''}</span>
+                    </div>
+                    <p className="font-mono text-[11px] text-slate-700 dark:text-slate-300 italic bg-white dark:bg-slate-900 p-2 rounded border border-blue-100 dark:border-blue-900/30">
+                      "{item?.sourceB?.statement || 'Version révisée ou contestée'}"
+                    </p>
+                    {docB && (
+                      <button
+                        onClick={() => onSelectDocument(docB)}
+                        className="text-[10px] font-semibold text-blue-600 hover:underline flex items-center gap-0.5 cursor-pointer"
+                      >
+                        Voir le document <ExternalLink className="w-2.5 h-2.5" />
+                      </button>
+                    )}
                   </div>
-                  <p className="font-mono text-[11px] text-slate-700 dark:text-slate-300 italic bg-white dark:bg-slate-900 p-2 rounded border border-blue-100 dark:border-blue-900/30">
-                    "{item.sourceB.statement}"
-                  </p>
-                  {docB && (
-                    <button
-                      onClick={() => onSelectDocument(docB)}
-                      className="text-[10px] font-semibold text-blue-600 hover:underline flex items-center gap-0.5"
-                    >
-                      Voir le document <ExternalLink className="w-2.5 h-2.5" />
-                    </button>
-                  )}
+
                 </div>
 
-              </div>
-
-              {/* Current Truth */}
-              <div className="p-3 rounded-xl bg-emerald-50/70 dark:bg-emerald-950/30 border border-emerald-200 dark:border-emerald-800/60 space-y-1 text-xs">
-                <div className="flex items-center gap-1.5 font-bold text-emerald-900 dark:text-emerald-300">
-                  <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600" />
-                  <span>Statut Valide :</span>
-                  <span className="font-medium text-slate-800 dark:text-slate-200">{item.validStatus}</span>
+                {/* Current Truth */}
+                <div className="p-3 rounded-xl bg-emerald-50/70 dark:bg-emerald-950/30 border border-emerald-200 dark:border-emerald-800/60 space-y-1 text-xs">
+                  <div className="flex items-center gap-1.5 font-bold text-emerald-900 dark:text-emerald-300">
+                    <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600" />
+                    <span>Statut Valide :</span>
+                    <span className="font-medium text-slate-800 dark:text-slate-200">{item.validStatus || 'Sous réserve d\'arbitrage'}</span>
+                  </div>
+                  <div className="text-[11px] text-emerald-950 dark:text-emerald-200 flex items-center gap-1 pt-1">
+                    <Lightbulb className="w-3.5 h-3.5 text-amber-500 shrink-0" />
+                    <span><strong>Action :</strong> {item.recommendation || 'Se référer au compte-rendu de gouvernance le plus récent.'}</span>
+                  </div>
                 </div>
-                <div className="text-[11px] text-emerald-950 dark:text-emerald-200 flex items-center gap-1 pt-1">
-                  <Lightbulb className="w-3.5 h-3.5 text-amber-500 shrink-0" />
-                  <span><strong>Action :</strong> {item.recommendation}</span>
-                </div>
               </div>
-            </div>
-          );
-        })}
+            );
+          })
+        )}
       </div>
     </div>
   );

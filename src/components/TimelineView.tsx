@@ -10,12 +10,14 @@ interface TimelineViewProps {
 
 export const TimelineView: React.FC<TimelineViewProps> = ({
   analysis,
-  documents,
+  documents = [],
   onSelectDocument
 }) => {
   const [filter, setFilter] = useState<'all' | 'completed' | 'pending'>('all');
 
-  const milestones = analysis.milestones.filter(m => {
+  const allMilestones = analysis?.milestones || [];
+
+  const milestones = allMilestones.filter(m => {
     if (filter === 'completed') return m.status === 'completed';
     if (filter === 'pending') return m.status !== 'completed';
     return true;
