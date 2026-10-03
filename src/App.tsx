@@ -9,8 +9,7 @@ import { TimelineView } from './components/TimelineView';
 import { ExecutiveBriefing } from './components/ExecutiveBriefing';
 import { DocumentViewerModal } from './components/DocumentViewerModal';
 import { LocalDemoModal } from './components/LocalDemoModal';
-import { FlowchartModal } from './components/FlowchartModal';
-import { MoreModal } from './components/MoreModal';
+import { MorePage } from './components/MorePage';
 import { INITIAL_NOVA_ANALYSIS, SAMPLE_DOCUMENTS_NOVA } from './data/sampleProjects';
 import { ProjectAnalysis, ProjectDocument } from './types/project';
 
@@ -22,9 +21,6 @@ export default function App() {
   const [isAnalyzing, setIsAnalyzing] = useState(false);
   const [initialChatQuery, setInitialChatQuery] = useState<string | undefined>(undefined);
   const [isLocalGuideOpen, setIsLocalGuideOpen] = useState(false);
-  const [isFlowchartOpen, setIsFlowchartOpen] = useState(false);
-  const [isMoreModalOpen, setIsMoreModalOpen] = useState(false);
-  const [moreModalTab, setMoreModalTab] = useState<'brain_sources' | 'advisor'>('brain_sources');
 
   // Fetch current state from backend on mount
   useEffect(() => {
@@ -104,11 +100,6 @@ export default function App() {
         onRefresh={handleRefreshAnalysis}
         isAnalyzing={isAnalyzing}
         onOpenLocalGuide={() => setIsLocalGuideOpen(true)}
-        onOpenFlowchart={() => setIsFlowchartOpen(true)}
-        onOpenMore={() => {
-          setMoreModalTab('brain_sources');
-          setIsMoreModalOpen(true);
-        }}
       />
 
       {/* Main Content Viewport */}
@@ -167,6 +158,17 @@ export default function App() {
             documents={documents}
           />
         )}
+
+        {activeTab === 'more' && (
+          <MorePage
+            analysis={analysis}
+            documents={documents}
+            onSelectDocument={setSelectedDocument}
+            onRefreshAnalysis={handleRefreshAnalysis}
+            isAnalyzing={isAnalyzing}
+            onDocumentsAdded={handleDocumentsAdded}
+          />
+        )}
       </main>
 
       {/* Global Document Viewer Modal */}
@@ -179,25 +181,6 @@ export default function App() {
       <LocalDemoModal
         isOpen={isLocalGuideOpen}
         onClose={() => setIsLocalGuideOpen(false)}
-      />
-
-      {/* Minimalist Architecture Flowchart Modal */}
-      <FlowchartModal
-        isOpen={isFlowchartOpen}
-        onClose={() => setIsFlowchartOpen(false)}
-      />
-
-      {/* More Modal: Combined Cerveau & Sources + Frontier vs Local LLM */}
-      <MoreModal
-        isOpen={isMoreModalOpen}
-        onClose={() => setIsMoreModalOpen(false)}
-        analysis={analysis}
-        documents={documents}
-        onSelectDocument={setSelectedDocument}
-        onRefreshAnalysis={handleRefreshAnalysis}
-        isAnalyzing={isAnalyzing}
-        onDocumentsAdded={handleDocumentsAdded}
-        initialSubTab={moreModalTab}
       />
     </div>
   );
