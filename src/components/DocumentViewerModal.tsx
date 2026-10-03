@@ -1,6 +1,7 @@
 import React from 'react';
 import { ProjectDocument } from '../types/project';
 import { X, FileText, Calendar, User, Tag, CheckCircle2, AlertTriangle, Clock, Copy, Check, Mail, Inbox, Send, Paperclip } from 'lucide-react';
+import { cleanUtfString } from '../utils/cleanUtf';
 
 interface DocumentViewerModalProps {
   document: ProjectDocument | null;
@@ -12,8 +13,13 @@ export const DocumentViewerModal: React.FC<DocumentViewerModalProps> = ({ docume
 
   if (!document) return null;
 
+  const cleanDocName = cleanUtfString(document.name);
+  const cleanSummary = cleanUtfString(document.summary);
+  const cleanAuthor = cleanUtfString(document.author || '');
+  const cleanContent = cleanUtfString(document.content);
+
   const handleCopy = () => {
-    navigator.clipboard.writeText(document.content);
+    navigator.clipboard.writeText(cleanContent);
     setCopied(true);
     setTimeout(() => setCopied(false), 2000);
   };
@@ -61,7 +67,7 @@ export const DocumentViewerModal: React.FC<DocumentViewerModalProps> = ({ docume
             <div>
               <div className="flex items-center gap-2">
                 <h3 className="text-lg font-bold text-slate-900 dark:text-white truncate max-w-md">
-                  {document.name}
+                  {cleanDocName}
                 </h3>
                 {getStatusBadge(document.relevanceStatus)}
               </div>
@@ -94,10 +100,10 @@ export const DocumentViewerModal: React.FC<DocumentViewerModalProps> = ({ docume
             <Calendar className="w-3.5 h-3.5 text-slate-400" />
             <span>Date : <strong className="font-semibold text-slate-800 dark:text-slate-200">{document.date}</strong></span>
           </div>
-          {document.author && (
+          {cleanAuthor && (
             <div className="flex items-center gap-1.5">
               <User className="w-3.5 h-3.5 text-slate-400" />
-              <span>Auteur / Expéditeur : <strong className="font-semibold text-slate-800 dark:text-slate-200">{document.author}</strong></span>
+              <span>Auteur / Expéditeur : <strong className="font-semibold text-slate-800 dark:text-slate-200">{cleanAuthor}</strong></span>
             </div>
           )}
           <div className="flex items-center gap-1.5 ml-auto">
@@ -119,17 +125,17 @@ export const DocumentViewerModal: React.FC<DocumentViewerModalProps> = ({ docume
               <SparklesIcon className="w-3.5 h-3.5 text-blue-600 dark:text-blue-400" /> Synthèse automatique de la pièce
             </p>
             <p className="text-sm text-blue-950 dark:text-blue-100 font-medium leading-relaxed">
-              {document.summary}
+              {cleanSummary}
             </p>
           </div>
 
           <div>
             <h4 className="text-xs font-bold uppercase tracking-wider text-slate-400 dark:text-slate-500 mb-2 flex items-center justify-between">
               <span>{isEmail ? 'Texte Décrypté du Courriel (.EML)' : 'Contenu Intégral du Document'}</span>
-              <span className="text-[11px] font-normal text-slate-500 lowercase">{document.content.length} caractères</span>
+              <span className="text-[11px] font-normal text-slate-500 lowercase">{cleanContent.length} caractères</span>
             </h4>
             <div className="p-4 rounded-xl bg-slate-900 text-slate-100 font-mono text-xs leading-relaxed overflow-x-auto whitespace-pre-wrap border border-slate-800 select-text shadow-inner">
-              {document.content}
+              {cleanContent}
             </div>
           </div>
         </div>

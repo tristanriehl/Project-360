@@ -1,10 +1,11 @@
 import { ProjectAnalysis } from '../types/project';
+import { sanitizeObjectUtf, cleanUtfString } from './cleanUtf';
 
 export function normalizeAnalysis(raw: any, fallbackName = 'Projet'): ProjectAnalysis {
   if (!raw || typeof raw !== 'object') {
-    return {
+    return sanitizeObjectUtf({
       projectId: 'PRJ-' + Date.now(),
-      projectName: fallbackName,
+      projectName: cleanUtfString(fallbackName),
       status: 'on_track',
       statusLabel: 'Sous Contrôle',
       healthScore: 85,
@@ -27,7 +28,7 @@ export function normalizeAnalysis(raw: any, fallbackName = 'Projet'): ProjectAna
       activeBlockersCount: 0,
       decisionsCount: 0,
       upcomingDeadlinesCount: 0
-    };
+    });
   }
 
   const rawDecisions = Array.isArray(raw.decisions) ? raw.decisions : [];
@@ -139,7 +140,7 @@ export function normalizeAnalysis(raw: any, fallbackName = 'Projet'): ProjectAna
     ? String(raw.statusLabel)
     : computedStatus === 'delayed' ? 'En Retard Critique' : computedStatus === 'at_risk' ? 'Sous Surveillance' : 'Sous Contrôle';
 
-  return {
+  return sanitizeObjectUtf({
     projectId: String(raw.projectId || `PRJ-${Date.now().toString().slice(-4)}`),
     projectName: String(raw.projectName || fallbackName),
     status: computedStatus,
@@ -158,5 +159,5 @@ export function normalizeAnalysis(raw: any, fallbackName = 'Projet'): ProjectAna
     activeBlockersCount: typeof raw.activeBlockersCount === 'number' ? raw.activeBlockersCount : risks.filter((r: any) => r.severity === 'high').length,
     decisionsCount: typeof raw.decisionsCount === 'number' ? raw.decisionsCount : decisions.length,
     upcomingDeadlinesCount: typeof raw.upcomingDeadlinesCount === 'number' ? raw.upcomingDeadlinesCount : milestones.filter((m: any) => m.status !== 'completed').length
-  };
+  });
 }

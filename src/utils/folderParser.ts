@@ -1,4 +1,5 @@
 import { ProjectDocument } from '../types/project';
+import { cleanUtfString } from './cleanUtf';
 
 /**
  * Decodes RFC 2047 MIME encoded words (e.g. =?UTF-8?B?...?= or =?UTF-8?Q?...?= or =?ISO-8859-1?Q?...?=)
@@ -544,13 +545,13 @@ export function processFileIntoDocument(file: { name: string; lastModified?: num
 
   return {
     id: `doc-${index}-${fileName.replace(/[^a-zA-Z0-9]/g, '_')}`,
-    name: fileName,
+    name: cleanUtfString(fileName),
     category,
     categoryLabel,
     date,
-    author,
-    summary,
-    content,
+    author: cleanUtfString(author),
+    summary: cleanUtfString(summary),
+    content: cleanUtfString(content),
     tags: [categoryLabel, ext.toUpperCase()],
     fileType: ext.toUpperCase(),
     relevanceStatus: 'valid'

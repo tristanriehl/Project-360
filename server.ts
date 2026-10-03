@@ -8,6 +8,7 @@ import { ProjectAnalysis, ProjectDocument } from './src/types/project.js';
 import { synthesizeDatasetLocally } from './src/utils/datasetSynthesizer.js';
 import { normalizeAnalysis } from './src/utils/normalizeAnalysis.js';
 import { processFileIntoDocument, parseEmlContent } from './src/utils/folderParser.js';
+import { cleanUtfString, sanitizeObjectUtf } from './src/utils/cleanUtf.js';
 
 dotenv.config();
 
@@ -136,14 +137,14 @@ function localKeywordSearch(query: string, docs: ProjectDocument[]) {
 
     const lines = (doc.content || '').split(/\r?\n/);
     for (const line of lines) {
-      const cleanLine = line.trim();
+      const cleanLine = cleanUtfString(line.trim());
       if (cleanLine.startsWith('---') || cleanLine.startsWith('===')) continue;
       if (queryTerms.some((t: string) => cleanLine.toLowerCase().includes(t)) && cleanLine.length > 15) {
         if (bestMatches.length < 5 && !bestMatches.some(m => m.quote === cleanLine)) {
           bestMatches.push({
-            docName: doc.name,
-            quote: cleanLine.slice(0, 260),
-            relevance: `Extrait pertinent (${doc.categoryLabel}) - ${doc.name} (${doc.date})`
+            docName: cleanUtfString(doc.name),
+            quote: cleanUtfString(cleanLine.slice(0, 260)),
+            relevance: cleanUtfString(`Extrait pertinent (${doc.categoryLabel}) - ${doc.name} (${doc.date})`)
           });
         }
       }
@@ -152,8 +153,8 @@ function localKeywordSearch(query: string, docs: ProjectDocument[]) {
 
   if (bestMatches.length === 0 && bestDoc) {
     bestMatches.push({
-      docName: bestDoc.name,
-      quote: bestDoc.summary || bestDoc.content.slice(0, 200),
+      docName: cleanUtfString(bestDoc.name),
+      quote: cleanUtfString(bestDoc.summary || bestDoc.content.slice(0, 200)),
       relevance: 'Pièce documentaire indexée dans la mémoire opérationnelle'
     });
   }
@@ -673,12 +674,12 @@ Réponds au format JSON avec le schéma suivant :
       });
 
       const parsed = JSON.parse(response.text || '{}');
-      res.json(parsed);
+      res.json(sanitizeObjectUtf(parsed));
     } catch (cloudErr: any) {
       console.warn('Gemini API call hit quota/error (falling back to local RAG/Ollama):', cloudErr?.message || cloudErr);
       // Automatic graceful fallback to local Ollama / local RAG
       const localFallback = await handleLocalRagResponse();
-      res.json(localFallback);
+      res.json(sanitizeObjectUtf(localFallback));
     }
   } catch (err: any) {
     console.error('Error in /api/chat-rag:', err);
