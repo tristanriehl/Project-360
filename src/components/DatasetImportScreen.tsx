@@ -115,13 +115,15 @@ export const DatasetImportScreen: React.FC<DatasetImportScreenProps> = ({
     try {
       setIsProcessing(true);
 
-      // Step 1: Parse and read local files
+      // Step 1: Parse and read local files with live scanning progress
       setProcessingStep(
         isEn 
-          ? `Reading and indexing ${fileArray.length} files...` 
-          : `Lecture et indexation des ${fileArray.length} pièces du dossier...`
+          ? `Reading and scanning ${fileArray.length} files (PDF, Excel, Images, Emails)...` 
+          : `Lecture et numérisation des ${fileArray.length} pièces (PDF, Excel, Images, Courriels)...`
       );
-      const parsedDocs = await parseUploadedFiles(fileArray);
+      const parsedDocs = await parseUploadedFiles(fileArray, (msg) => {
+        setProcessingStep(msg);
+      });
 
       if (parsedDocs.length === 0) {
         throw new Error(isEn ? 'Could not extract valid text from the selected files.' : 'Impossible d\'extraire du texte valide des fichiers sélectionnés.');
@@ -266,6 +268,7 @@ export const DatasetImportScreen: React.FC<DatasetImportScreenProps> = ({
         multiple
         onChange={handleFileInputChange}
         className="hidden"
+        accept=".pdf,.xlsx,.xls,.xlsm,.png,.jpg,.jpeg,.webp,.eml,.msg,.txt,.md,.csv,.json,.docx,.pptx"
       />
 
       {/* Main Drag & Drop / Selection Card */}
@@ -289,7 +292,7 @@ export const DatasetImportScreen: React.FC<DatasetImportScreenProps> = ({
             <h3 className="text-base font-bold text-slate-900 dark:text-white">
               {isEn ? 'Processing and Indexing Documents...' : 'Traitement et indexation des documents...'}
             </h3>
-            <p className="text-xs text-blue-600 dark:text-blue-400 font-semibold">
+            <p className="text-xs text-blue-600 dark:text-blue-400 font-semibold max-w-md mx-auto truncate">
               {processingStep}
             </p>
           </div>
@@ -303,8 +306,10 @@ export const DatasetImportScreen: React.FC<DatasetImportScreenProps> = ({
               <h3 className="text-base font-bold text-slate-900 dark:text-white">
                 {isEn ? 'Drag & drop your project folder or files here' : 'Glissez votre dossier ou vos fichiers ici'}
               </h3>
-              <p className="text-xs text-slate-500">
-                {isEn ? 'Supports all file formats (.eml, .txt, .pdf, .docx, .xlsx, .md, .json, .csv)' : 'Prend en charge tous les formats (.eml, .txt, .pdf, .docx, .xlsx, .md, .json, .csv)'}
+              <p className="text-xs text-slate-500 max-w-lg mx-auto">
+                {isEn 
+                  ? 'Supports PDF, Excel (.xlsx, .xls), Images PNG / JPG (with OCR), Emails (.eml), Transcripts (.txt), and Markdown (.md)' 
+                  : 'Prend en charge les PDF, Tableurs Excel (.xlsx, .xls), Images PNG / JPG (avec OCR), Courriels (.eml), Transcripts (.txt) et Markdown (.md)'}
               </p>
             </div>
 

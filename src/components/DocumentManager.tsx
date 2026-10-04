@@ -17,7 +17,8 @@ import {
   MessageSquare, 
   Archive,
   RefreshCw,
-  Loader2
+  Loader2,
+  Image as ImageIcon
 } from 'lucide-react';
 import { ProjectAnalysis, ProjectDocument } from '../types/project';
 import { parseUploadedFiles } from '../utils/folderParser';
@@ -40,6 +41,7 @@ export const DocumentManager: React.FC<DocumentManagerProps> = ({
   const [selectedCategory, setSelectedCategory] = useState<string>('all');
   const [searchQuery, setSearchQuery] = useState('');
   const [isUploading, setIsUploading] = useState(false);
+  const [uploadStatus, setUploadStatus] = useState<string>('');
   const [dragActive, setDragActive] = useState(false);
 
   const categories = [
@@ -47,15 +49,23 @@ export const DocumentManager: React.FC<DocumentManagerProps> = ({
     { id: 'email', label: '01 Courriels (.eml)', icon: <Mail className="w-4 h-4 text-blue-500" /> },
     { id: 'meeting', label: '02 Réunions & Transcripts', icon: <Users className="w-4 h-4 text-purple-500" /> },
     { id: 'ticket', label: '03 Tickets JIRA & Incidents', icon: <ShieldAlert className="w-4 h-4 text-pink-500" /> },
-    { id: 'project_doc', label: '04 Documents Projet & Plans', icon: <FileSpreadsheet className="w-4 h-4 text-sky-500" /> },
+    { id: 'project_doc', label: '04 Documents & Tableurs (.xlsx)', icon: <FileSpreadsheet className="w-4 h-4 text-sky-500" /> },
     { id: 'contract_finance', label: '05 Contrats & Finances', icon: <FileText className="w-4 h-4 text-emerald-500" /> },
     { id: 'architecture', label: '06 Architecture & ADR', icon: <FileCode className="w-4 h-4 text-amber-500" /> },
-    { id: 'teams', label: '07 Conversations Teams', icon: <MessageSquare className="w-4 h-4 text-indigo-500" /> },
-    { id: 'archive', label: '08 Archives & Annexes', icon: <Archive className="w-4 h-4 text-slate-500" /> }
+    { id: 'image', label: '07 Schémas & Images (.png)', icon: <ImageIcon className="w-4 h-4 text-violet-500" /> },
+    { id: 'teams', label: '08 Conversations Teams', icon: <MessageSquare className="w-4 h-4 text-indigo-500" /> },
+    { id: 'archive', label: '09 Archives & Annexes', icon: <Archive className="w-4 h-4 text-slate-500" /> }
   ];
 
   const filteredDocs = documents.filter(doc => {
-    if (selectedCategory !== 'all' && doc.category !== selectedCategory) return false;
+    if (selectedCategory !== 'all') {
+      if (selectedCategory === 'image') {
+        const isImg = ['png', 'jpg', 'jpeg', 'webp', 'gif'].includes(doc.fileType?.toLowerCase() || '') || !!doc.previewUrl;
+        if (!isImg) return false;
+      } else if (doc.category !== selectedCategory) {
+        return false;
+      }
+    }
     if (searchQuery.trim()) {
       const matchName = doc.name.toLowerCase().includes(searchQuery.toLowerCase());
       const matchContent = doc.content.toLowerCase().includes(searchQuery.toLowerCase());
@@ -71,10 +81,12 @@ export const DocumentManager: React.FC<DocumentManagerProps> = ({
     if (!files || files.length === 0) return;
 
     setIsUploading(true);
+    setUploadStatus('Lecture et numérisation des fichiers...');
 
     try {
-      const parsedDocs = await parseUploadedFiles(files);
+      const parsedDocs = await parseUploadedFiles(files, (msg) => setUploadStatus(msg));
       
+      setUploadStatus('Synchronisation avec la mémoire opérationnelle...');
       const response = await fetch('/api/ingest-files', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -91,6 +103,7 @@ export const DocumentManager: React.FC<DocumentManagerProps> = ({
       alert(`Erreur d'ingestion : ${err.message}`);
     } finally {
       setIsUploading(false);
+      setUploadStatus('');
       e.target.value = '';
     }
   };
@@ -112,10 +125,12 @@ export const DocumentManager: React.FC<DocumentManagerProps> = ({
 
     if (e.dataTransfer.files && e.dataTransfer.files.length > 0) {
       setIsUploading(true);
+      setUploadStatus('Numérisation des fichiers déposés...');
 
       try {
-        const parsedDocs = await parseUploadedFiles(e.dataTransfer.files);
+        const parsedDocs = await parseUploadedFiles(e.dataTransfer.files, (msg) => setUploadStatus(msg));
         
+        setUploadStatus('Synchronisation avec la mémoire opérationnelle...');
         const response = await fetch('/api/ingest-files', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
@@ -132,6 +147,7 @@ export const DocumentManager: React.FC<DocumentManagerProps> = ({
         alert(`Erreur d'ingestion : ${err.message}`);
       } finally {
         setIsUploading(false);
+        setUploadStatus('');
       }
     }
   };
@@ -156,21 +172,22 @@ export const DocumentManager: React.FC<DocumentManagerProps> = ({
 
         <div className="flex items-center gap-2">
           <label className="px-4 py-2 rounded-xl bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold flex items-center gap-2 cursor-pointer shadow-md shadow-blue-500/20 transition-all">
-            <Upload className="w-4 h-4" />
-            <span>Importer des fichiers</span>
+            {isUploading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Upload className="w-4 h-4" />}
+            <span>{isUploading ? 'Numérisation...' : 'Importer des fichiers'}</span>
             <input
               type="file"
               multiple
+              disabled={isUploading}
               onChange={handleFileUpload}
               className="hidden"
-              accept=".txt,.pdf,.eml,.md,.csv,.json,.xlsx,.docx,.pptx"
+              accept=".pdf,.xlsx,.xls,.xlsm,.png,.jpg,.jpeg,.webp,.eml,.msg,.txt,.md,.csv,.json,.docx,.pptx"
             />
           </label>
 
           <button
             onClick={onRefreshAnalysis}
-            disabled={isAnalyzing}
-            className="px-3.5 py-2 rounded-xl bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 text-xs font-semibold flex items-center gap-1.5 transition-colors"
+            disabled={isAnalyzing || isUploading}
+            className="px-3.5 py-2 rounded-xl bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 text-xs font-semibold flex items-center gap-1.5 transition-colors cursor-pointer"
             title="Relancer la synthèse complète du projet avec les nouveaux fichiers"
           >
             <RefreshCw className={`w-3.5 h-3.5 ${isAnalyzing ? 'animate-spin text-blue-600' : ''}`} />
@@ -178,6 +195,17 @@ export const DocumentManager: React.FC<DocumentManagerProps> = ({
           </button>
         </div>
       </div>
+
+      {/* Uploading progress notification */}
+      {isUploading && (
+        <div className="p-4 rounded-2xl bg-blue-50 dark:bg-blue-950/60 border border-blue-200 dark:border-blue-900 flex items-center gap-3 text-xs text-blue-800 dark:text-blue-200 shadow-sm animate-pulse">
+          <Loader2 className="w-5 h-5 animate-spin text-blue-600 shrink-0" />
+          <div className="flex-1">
+            <p className="font-bold">Traitement documentaire en cours...</p>
+            <p className="text-[11px] text-blue-600 dark:text-blue-400 mt-0.5">{uploadStatus || 'Numérisation haute fidélité (PDF, Excel, Images PNG)...'}</p>
+          </div>
+        </div>
+      )}
 
       {/* Drag & Drop Zone */}
       <div
@@ -195,8 +223,8 @@ export const DocumentManager: React.FC<DocumentManagerProps> = ({
         <h4 className="text-xs font-bold text-slate-800 dark:text-slate-200">
           Glissez-déposez vos fichiers de projet ici
         </h4>
-        <p className="text-[11px] text-slate-500 mt-0.5">
-          Courriels (.eml), Transcripts (.txt), Spécifications (.md / .pdf), Données (.csv / .xlsx)
+        <p className="text-[11px] text-slate-500 mt-0.5 max-w-lg mx-auto">
+          Documents PDF (.pdf), Tableurs Excel (.xlsx / .xls), Schémas &amp; Images PNG (.png / .jpg), Courriels (.eml) et Transcripts (.txt)
         </p>
       </div>
 

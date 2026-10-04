@@ -3,6 +3,8 @@ import { GoogleGenAI, Type } from '@google/genai';
 import dotenv from 'dotenv';
 import path from 'path';
 import { fileURLToPath } from 'url';
+import * as XLSX from 'xlsx';
+import { PDFParse } from 'pdf-parse';
 import { INITIAL_NOVA_ANALYSIS, SAMPLE_DOCUMENTS_NOVA, SAMPLE_DOCUMENTS_ORION } from './src/data/sampleProjects.js';
 import { ProjectAnalysis, ProjectDocument } from './src/types/project.js';
 import { synthesizeDatasetLocally } from './src/utils/datasetSynthesizer.js';
@@ -33,8 +35,8 @@ const ai = new GoogleGenAI({
   },
 });
 
-// Standard fast & accurate model for structured JSON synthesis and RAG
-const GEMINI_MODEL = 'gemini-2.5-flash';
+// Standard fast & accurate multimodal model for structured JSON synthesis, OCR and RAG
+const GEMINI_MODEL = 'gemini-3.8-flash';
 
 // Local LLM Configuration (Ollama, LM Studio, etc.)
 const OLLAMA_HOST = process.env.OLLAMA_HOST || 'http://localhost:11434';
@@ -385,7 +387,19 @@ app.post('/api/upload-dataset', async (req: Request, res: Response) => {
       return res.status(400).json({ error: 'No documents provided' });
     }
 
-    currentDocuments = documents;
+    // Process and scan any incoming documents that have base64 or need full parsing
+    const processedDocs: ProjectDocument[] = [];
+    for (let i = 0; i < documents.length; i++) {
+      const doc = documents[i];
+      if (doc.id && doc.category && doc.summary && doc.content && !doc.base64) {
+        processedDocs.push(doc);
+      } else {
+        const scanned = await scanFilePayload(doc, i + 1);
+        processedDocs.push(scanned);
+      }
+    }
+
+    currentDocuments = processedDocs;
 
     // Generate local factual synthesis from documents as rock-solid baseline
     const localSynthesis = synthesizeDatasetLocally(currentDocuments, folderName);
@@ -970,7 +984,423 @@ app.post('/api/compare-projects', async (req: Request, res: Response) => {
   }
 });
 
-// 10. POST /api/ingest-files - Ingest custom user files (PDF, EML, TXT, CSV, MD, PPTX text)
+// ==========================================
+// DOCUMENT SCANNERS (EXCEL, PDF, PNG IMAGES)
+// ==========================================
+
+function scanExcelBuffer(buffer: Buffer, fileName: string, index = 1): ProjectDocument {
+  try {
+    const workbook = XLSX.read(buffer, { type: 'buffer' });
+    const sheetNames = workbook.SheetNames || [];
+    const sections: string[] = [];
+    let totalRows = 0;
+    let hasFinancialKeywords = false;
+    let hasTicketKeywords = false;
+    let hasMilestoneKeywords = false;
+
+    for (const sheetName of sheetNames) {
+      const sheet = workbook.Sheets[sheetName];
+      if (!sheet) continue;
+
+      const rows: any[][] = XLSX.utils.sheet_to_json(sheet, { header: 1, defval: '' });
+      if (rows.length === 0) continue;
+
+      totalRows += rows.length;
+      const headerRow = rows[0] || [];
+      const headerStr = headerRow.map((c: any) => String(c).trim()).join(' | ');
+
+      if (/budget|facture|cout|finance|devis|montant|prix|taux|total|depense|invoice|amount|cost|\$|€|cad/i.test(headerStr)) {
+        hasFinancialKeywords = true;
+      }
+      if (/jira|ticket|bug|incident|severit|priorit|status|issue/i.test(headerStr)) {
+        hasTicketKeywords = true;
+      }
+      if (/jalon|milestone|gantt|planning|echeance|deadline|date|livrable/i.test(headerStr)) {
+        hasMilestoneKeywords = true;
+      }
+
+      // Format clean Markdown table (first 80 rows for responsiveness)
+      const displayRows = rows.slice(0, 80);
+      const tableMdLines: string[] = [];
+
+      const formattedHeaders = headerRow.map((h: any) => String(h || '-').replace(/\|/g, '/'));
+      tableMdLines.push(`| ${formattedHeaders.join(' | ')} |`);
+      tableMdLines.push(`| ${formattedHeaders.map(() => '---').join(' | ')} |`);
+
+      for (let r = 1; r < displayRows.length; r++) {
+        const row = displayRows[r];
+        if (!row || row.every((cell: any) => cell === '' || cell === null || cell === undefined)) continue;
+        const formattedCells = headerRow.map((_: any, colIdx: number) => {
+          const val = row[colIdx];
+          if (val === null || val === undefined || val === '') return '-';
+          return String(val).replace(/\|/g, '/').replace(/\r?\n/g, ' ');
+        });
+        tableMdLines.push(`| ${formattedCells.join(' | ')} |`);
+      }
+
+      if (rows.length > 80) {
+        tableMdLines.push(`\n*(... et ${rows.length - 80} lignes supplémentaires archivées dans le classeur)*`);
+      }
+
+      sections.push(`### 📊 Feuille : "${sheetName}" (${rows.length} lignes, ${headerRow.length} colonnes)\n\n${tableMdLines.join('\n')}`);
+    }
+
+    const lowerName = fileName.toLowerCase();
+    let category: ProjectDocument['category'] = 'project_doc';
+    let categoryLabel = 'Document Projet (Tableur)';
+
+    if (hasFinancialKeywords || lowerName.includes('budget') || lowerName.includes('finance') || lowerName.includes('facture') || lowerName.includes('devis') || lowerName.includes('cout') || lowerName.includes('invoice') || lowerName.includes('depense')) {
+      category = 'contract_finance';
+      categoryLabel = 'Contrats & Finances (Excel)';
+    } else if (hasTicketKeywords || lowerName.includes('ticket') || lowerName.includes('bug') || lowerName.includes('incident') || lowerName.includes('jira')) {
+      category = 'ticket';
+      categoryLabel = 'Tickets & Incidents (Tableur)';
+    } else if (hasMilestoneKeywords || lowerName.includes('planning') || lowerName.includes('jalon') || lowerName.includes('gantt') || lowerName.includes('suivi')) {
+      category = 'project_doc';
+      categoryLabel = 'Planning & Jalons (Excel)';
+    }
+
+    const summary = `Tableur Excel numérisé (${sheetNames.length} feuille(s) : ${sheetNames.join(', ')} - ${totalRows} lignes extraites). Structure matricielle intégrée à la mémoire opérationnelle.`;
+    const content = `# TABLEUR EXCEL : ${fileName}
+- Nombre de feuilles : ${sheetNames.length} (${sheetNames.join(', ')})
+- Lignes totales analysées : ${totalRows}
+- Format : Classeur Microsoft Excel (.${fileName.split('.').pop() || 'xlsx'})
+- Date de numérisation : ${new Date().toISOString().split('T')[0]}
+
+---
+
+${sections.join('\n\n---\n\n')}`;
+
+    const ext = fileName.split('.').pop()?.toUpperCase() || 'XLSX';
+
+    return {
+      id: `doc-${index}-${fileName.replace(/[^a-zA-Z0-9]/g, '_')}`,
+      name: fileName,
+      category,
+      categoryLabel,
+      date: new Date().toISOString().split('T')[0],
+      author: 'Contrôleur de Gestion / Tableur',
+      summary,
+      content,
+      tags: [categoryLabel, ext, `${sheetNames.length} feuilles`],
+      fileType: ext,
+      relevanceStatus: 'valid',
+      fileSize: buffer.length
+    };
+  } catch (err: any) {
+    console.error(`Error parsing Excel ${fileName}:`, err);
+    return processFileIntoDocument({ name: fileName }, `[Erreur de lecture du tableur Excel ${fileName} : ${err.message}]`, index);
+  }
+}
+
+async function scanPdfBuffer(buffer: Buffer, fileName: string, cleanBase64?: string, index = 1): Promise<ProjectDocument> {
+  let rawText = '';
+  let numPages = 1;
+  let pdfAuthor = 'Équipe Projet';
+  let pdfDate = new Date().toISOString().split('T')[0];
+
+  try {
+    const parser = new PDFParse({ data: buffer });
+    const textResult = await parser.getText();
+    rawText = (textResult.text || '').trim();
+    numPages = textResult.total || 1;
+    const infoData = await parser.getInfo().catch(() => null);
+    if (infoData && (infoData as any).info) {
+      const info = (infoData as any).info;
+      if (info.Author) pdfAuthor = String(info.Author).trim();
+      if (info.CreationDate) {
+        const dMatch = String(info.CreationDate).match(/D:(\d{4})(\d{2})(\d{2})/);
+        if (dMatch) pdfDate = `${dMatch[1]}-${dMatch[2]}-${dMatch[3]}`;
+      }
+    }
+    await parser.destroy().catch(() => {});
+  } catch (pdfErr) {
+    console.warn(`Local PDFParse warning for ${fileName}:`, pdfErr);
+  }
+
+  // Multimodal Gemini scan if API key is provided
+  if (apiKey && cleanBase64) {
+    try {
+      const response = await ai.models.generateContent({
+        model: GEMINI_MODEL,
+        contents: [
+          {
+            inlineData: {
+              mimeType: 'application/pdf',
+              data: cleanBase64
+            }
+          },
+          `Tu es le moteur d'ingestion documentaire haute fidélité pour le cockpit 'Projet 360'.
+Analyse en profondeur ce document PDF ('${fileName}').
+Extrais le contenu avec la plus haute fidélité (texte intégral, titres de sections, tableaux, dates clés, chiffres et montants, décisions, jalons, clauses contractuelles ou techniques).
+Réponds impérativement au format JSON structuré avec :
+{
+  "title": "Titre exact ou descriptif du document",
+  "author": "Auteur, entreprise ou signataire du document",
+  "date": "Date du document (format AAAA-MM-JJ si trouvée, sinon date actuelle)",
+  "category": "contract_finance" | "architecture" | "meeting" | "ticket" | "project_doc",
+  "categoryLabel": "Libellé lisible de la catégorie",
+  "summary": "Résumé exécutif synthétique de 2 à 4 phrases avec les décisions et points majeurs",
+  "content": "Transcription exhaustive et structurée en Markdown (sections claires, tableaux, listes et chiffres clés)"
+}`
+        ],
+        config: {
+          responseMimeType: 'application/json'
+        }
+      });
+
+      const parsed = JSON.parse(response.text || '{}');
+      if (parsed.content && parsed.content.length > 50) {
+        const detectedCategory = parsed.category || 'project_doc';
+        const catLabels: Record<string, string> = {
+          contract_finance: 'Contrats & Finances (PDF)',
+          architecture: 'Architecture & Spécifications (PDF)',
+          meeting: 'Compte-rendu Réunion (PDF)',
+          ticket: 'Ticket & Incident (PDF)',
+          project_doc: 'Document Projet (PDF)'
+        };
+
+        return {
+          id: `doc-${index}-${fileName.replace(/[^a-zA-Z0-9]/g, '_')}`,
+          name: fileName,
+          category: detectedCategory,
+          categoryLabel: parsed.categoryLabel || catLabels[detectedCategory] || 'Document PDF Numérisé',
+          date: parsed.date || pdfDate,
+          author: parsed.author || pdfAuthor,
+          summary: parsed.summary || `Document PDF analysé (${numPages} page(s)) : ${fileName}`,
+          content: parsed.content,
+          tags: ['PDF Numérisé', parsed.categoryLabel || 'Document', `${numPages} page(s)`],
+          fileType: 'PDF',
+          relevanceStatus: 'valid',
+          fileSize: buffer.length
+        };
+      }
+    } catch (geminiPdfErr) {
+      console.warn(`Gemini PDF multimodal extraction fallback for ${fileName}:`, geminiPdfErr);
+    }
+  }
+
+  // Fallback to pdfParse extracted text
+  const lowerName = fileName.toLowerCase();
+  let category: ProjectDocument['category'] = 'project_doc';
+  let categoryLabel = 'Document Projet (PDF)';
+
+  if (lowerName.includes('contrat') || lowerName.includes('facture') || lowerName.includes('devis') || lowerName.includes('budget') || /montant|tarif|somme|\$|eur|cad/i.test(rawText.slice(0, 1000))) {
+    category = 'contract_finance';
+    categoryLabel = 'Contrats & Finances (PDF)';
+  } else if (lowerName.includes('arch') || lowerName.includes('adr') || lowerName.includes('spec') || lowerName.includes('tech')) {
+    category = 'architecture';
+    categoryLabel = 'Architecture & ADR (PDF)';
+  } else if (lowerName.includes('cr') || lowerName.includes('reunion') || lowerName.includes('pv') || lowerName.includes('meeting')) {
+    category = 'meeting';
+    categoryLabel = 'Compte-rendu Réunion (PDF)';
+  }
+
+  const cleanLines = rawText.split(/\r?\n/).map(l => l.trim()).filter(Boolean);
+  const firstMeaningfulLine = cleanLines.find(l => l.length > 15) || fileName;
+  const summary = `Document PDF indexé (${numPages} page(s)). ${firstMeaningfulLine.slice(0, 140)}`;
+
+  const formattedContent = `# DOCUMENT PDF : ${fileName}
+- Nombre de pages : ${numPages}
+- Date extraite : ${pdfDate}
+- Source / Auteur : ${pdfAuthor}
+
+---
+
+${rawText || '*(Le document PDF a été analysé et indexé dans le Cerveau Opérationnel).*'}`;
+
+  return {
+    id: `doc-${index}-${fileName.replace(/[^a-zA-Z0-9]/g, '_')}`,
+    name: fileName,
+    category,
+    categoryLabel,
+    date: pdfDate,
+    author: pdfAuthor,
+    summary,
+    content: formattedContent,
+    tags: ['PDF', categoryLabel, `${numPages} page(s)`],
+    fileType: 'PDF',
+    relevanceStatus: 'valid',
+    fileSize: buffer.length
+  };
+}
+
+async function scanImageBuffer(buffer: Buffer, fileName: string, mimeType: string, cleanBase64: string, index = 1): Promise<ProjectDocument> {
+  const previewUrl = `data:${mimeType || 'image/png'};base64,${cleanBase64}`;
+  const ext = fileName.split('.').pop()?.toUpperCase() || 'PNG';
+  const today = new Date().toISOString().split('T')[0];
+
+  if (apiKey && cleanBase64) {
+    try {
+      const response = await ai.models.generateContent({
+        model: GEMINI_MODEL,
+        contents: [
+          {
+            inlineData: {
+              mimeType: mimeType || 'image/png',
+              data: cleanBase64
+            }
+          },
+          `Tu es le moteur OCR et de vision d'intelligence documentaire de 'Projet 360'.
+Analyse cette image / capture d'écran / schéma d'architecture / document scanné ('${fileName}').
+Réalise :
+1. Une transcription textuelle OCR complète de tous les textes, étiquettes, boîtes, bulles et chiffres visibles.
+2. Une description architecturale et visuelle détaillée des flux, des relations entre composants (serveurs, bases de données, APIs, modules), des étapes ou des anomalies.
+3. Les décisions, jalons ou impacts représentés.
+
+Réponds impérativement au format JSON :
+{
+  "title": "Titre explicite (ex: Schéma d'architecture Cloud, Capture ticket JIRA SEC-402, Tableau de bord financier)",
+  "author": "Auteur, source ou firme identifiable (ou Équipe Projet)",
+  "date": "Date visible sur l'image ou AAAA-MM-JJ",
+  "category": "architecture" | "ticket" | "email" | "meeting" | "contract_finance" | "project_doc",
+  "categoryLabel": "Libellé de la catégorie",
+  "summary": "Résumé clair et percutant de ce que représente l'image et de ses implications pour le projet",
+  "content": "Transcription exhaustive OCR suivie de la description visuelle détaillée structurée en Markdown avec titres et puces"
+}`
+        ],
+        config: {
+          responseMimeType: 'application/json'
+        }
+      });
+
+      const parsed = JSON.parse(response.text || '{}');
+      if (parsed.content && parsed.content.length > 30) {
+        const cat = (parsed.category as ProjectDocument['category']) || 'architecture';
+        const catLabels: Record<string, string> = {
+          architecture: 'Schéma & Architecture (Image)',
+          ticket: 'Capture Ticket & Billet (Image)',
+          email: 'Capture Courriel (Image)',
+          meeting: 'Notes Réunion & Tableau (Image)',
+          contract_finance: 'Pièce Financière / Facture (Image)',
+          project_doc: 'Visuel Projet & Diagramme'
+        };
+
+        const markdownContent = `# ANALYSE VISUELLE & OCR : ${parsed.title || fileName}
+- Type de document : Image / Capture numérisée (${ext})
+- Date analysée : ${parsed.date || today}
+- Auteur / Source : ${parsed.author || 'Équipe Projet'}
+
+---
+
+## 🔍 Transcription & Décomposition Visuelle
+${parsed.content}`;
+
+        return {
+          id: `doc-${index}-${fileName.replace(/[^a-zA-Z0-9]/g, '_')}`,
+          name: fileName,
+          category: cat,
+          categoryLabel: parsed.categoryLabel || catLabels[cat] || 'Schéma & Image Projet',
+          date: parsed.date || today,
+          author: parsed.author || 'Équipe Projet',
+          summary: parsed.summary || `Analyse visuelle et OCR : ${fileName}`,
+          content: markdownContent,
+          tags: ['Image Numérisée', ext, catLabels[cat] || 'Visuel'],
+          fileType: ext,
+          relevanceStatus: 'valid',
+          previewUrl,
+          fileSize: buffer.length
+        };
+      }
+    } catch (imgErr) {
+      console.warn(`Gemini Vision OCR extraction fallback for image ${fileName}:`, imgErr);
+    }
+  }
+
+  // Local fallback without API key
+  const lowerName = fileName.toLowerCase();
+  let category: ProjectDocument['category'] = 'architecture';
+  let categoryLabel = 'Schéma & Architecture (Image)';
+
+  if (lowerName.includes('ticket') || lowerName.includes('bug') || lowerName.includes('jira')) {
+    category = 'ticket';
+    categoryLabel = 'Capture Ticket (Image)';
+  } else if (lowerName.includes('facture') || lowerName.includes('budget') || lowerName.includes('finance')) {
+    category = 'contract_finance';
+    categoryLabel = 'Document Financier (Image)';
+  }
+
+  return {
+    id: `doc-${index}-${fileName.replace(/[^a-zA-Z0-9]/g, '_')}`,
+    name: fileName,
+    category,
+    categoryLabel,
+    date: today,
+    author: 'Équipe Projet',
+    summary: `Image de projet indexée : ${fileName}. Aperçu visuel sauvegardé dans la base documentaire.`,
+    content: `# VISUEL PROJET : ${fileName}
+- Format : Image ${ext} (${(buffer.length / 1024).toFixed(1)} Ko)
+- Statut : Enregistrée dans la base documentaire.
+- Aperçu : Accessible dans le visualiseur de documents.`,
+    tags: ['Image', ext, categoryLabel],
+    fileType: ext,
+    relevanceStatus: 'valid',
+    previewUrl,
+    fileSize: buffer.length
+  };
+}
+
+async function scanFilePayload(item: { name: string; base64?: string; content?: string; mimeType?: string; lastModified?: number }, index = 1): Promise<ProjectDocument> {
+  const fileName = item.name || `Document_${index}.txt`;
+  const ext = fileName.split('.').pop()?.toLowerCase() || '';
+  const rawBase64 = item.base64 ? item.base64.replace(/^data:[^;]+;base64,/, '') : '';
+  const buffer = rawBase64 ? Buffer.from(rawBase64, 'base64') : Buffer.from(item.content || '', 'utf-8');
+  const mimeType = item.mimeType || '';
+
+  // 1. Excel spreadsheets (.xlsx, .xls, .xlsm, .csv)
+  if (ext === 'xlsx' || ext === 'xls' || ext === 'xlsm' || mimeType.includes('spreadsheet') || mimeType.includes('excel')) {
+    return scanExcelBuffer(buffer, fileName, index);
+  }
+
+  // 2. PDF documents (.pdf)
+  if (ext === 'pdf' || mimeType === 'application/pdf') {
+    return await scanPdfBuffer(buffer, fileName, rawBase64, index);
+  }
+
+  // 3. Images (PNG, JPG, JPEG, WEBP, GIF, BMP)
+  if (['png', 'jpg', 'jpeg', 'webp', 'gif', 'bmp'].includes(ext) || mimeType.startsWith('image/')) {
+    const actualMime = mimeType || `image/${ext === 'jpg' ? 'jpeg' : ext}`;
+    return await scanImageBuffer(buffer, fileName, actualMime, rawBase64, index);
+  }
+
+  // 4. Text / EML / Markdown / other files
+  const textContent = item.content || buffer.toString('utf-8');
+  const doc = processFileIntoDocument(
+    { name: fileName, lastModified: item.lastModified || Date.now() },
+    textContent,
+    index
+  );
+  if (item.base64 && (ext === 'png' || ext === 'jpg' || ext === 'jpeg')) {
+    doc.previewUrl = `data:${mimeType || 'image/png'};base64,${rawBase64}`;
+  }
+  doc.fileSize = buffer.length;
+  return doc;
+}
+
+// 9.5. POST /api/scan-file - Dedicated endpoint to scan and extract PDF, Excel (XLSX/XLS) and PNG images
+app.post('/api/scan-file', async (req: Request, res: Response) => {
+  try {
+    const { file, files } = req.body;
+    if (file) {
+      const doc = await scanFilePayload(file, 1);
+      return res.json({ success: true, document: doc });
+    }
+    if (files && Array.isArray(files)) {
+      const docs: ProjectDocument[] = [];
+      for (let i = 0; i < files.length; i++) {
+        const doc = await scanFilePayload(files[i], i + 1);
+        docs.push(doc);
+      }
+      return res.json({ success: true, documents: docs });
+    }
+    return res.status(400).json({ error: 'Aucun fichier fourni à numériser.' });
+  } catch (err: any) {
+    console.error('Error in /api/scan-file:', err);
+    res.status(500).json({ error: err.message || 'Erreur lors de la numérisation du fichier' });
+  }
+});
+
+// 10. POST /api/ingest-files - Ingest custom user files (PDF, XLSX, PNG, EML, TXT, CSV, MD)
 app.post('/api/ingest-files', async (req: Request, res: Response) => {
   try {
     const rawList = req.body.documents || req.body.files;
@@ -978,24 +1408,29 @@ app.post('/api/ingest-files', async (req: Request, res: Response) => {
       return res.status(400).json({ error: 'Aucun fichier fourni pour l\'ingestion.' });
     }
 
-    const newDocs: ProjectDocument[] = rawList.map((f: any, idx: number) => {
-      if (f.id && f.category && f.formattedContent) {
-        return f as ProjectDocument;
+    const newDocs: ProjectDocument[] = [];
+    for (let idx = 0; idx < rawList.length; idx++) {
+      const f = rawList[idx];
+      // If already a processed ProjectDocument with formatted text
+      if (f.id && f.category && f.summary && f.content && !f.base64) {
+        newDocs.push(f as ProjectDocument);
+      } else {
+        const scanned = await scanFilePayload(f, idx + 1);
+        newDocs.push(scanned);
       }
-      return processFileIntoDocument(
-        { name: f.name || `Document_${idx + 1}.txt`, lastModified: f.lastModified || Date.now() },
-        f.content || '',
-        idx + 1
-      );
-    });
+    }
 
-    currentDocuments = [...newDocs, ...currentDocuments];
+    // Merge into database (prevent exact duplicate ids)
+    const existingIds = new Set(currentDocuments.map(d => d.name));
+    const uniqueNew = newDocs.filter(d => !existingIds.has(d.name));
+    currentDocuments = [...newDocs, ...currentDocuments.filter(d => !newDocs.some(n => n.name === d.name))];
+
     const updatedSynthesis = synthesizeDatasetLocally(currentDocuments, currentAnalysis.projectName);
     currentAnalysis = normalizeAnalysis({ ...currentAnalysis, ...updatedSynthesis }, currentAnalysis.projectName);
 
     res.json({
       success: true,
-      message: `${newDocs.length} document(s) importé(s) avec succès dans le Cerveau du Projet.`,
+      message: `${newDocs.length} document(s) numérisé(s) et intégré(s) avec succès dans le Cerveau du Projet.`,
       addedDocuments: newDocs,
       totalDocuments: currentDocuments.length,
       updatedProject: currentAnalysis

@@ -1,4 +1,5 @@
 import { ProjectDocument } from '../types/project';
+import * as XLSX from 'xlsx';
 
 /**
  * Decodes RFC 2047 MIME encoded words (e.g. =?UTF-8?B?...?= or =?UTF-8?Q?...?= or =?ISO-8859-1?Q?...?=)
@@ -387,9 +388,162 @@ export function parseEmlContent(rawEml: string): {
 }
 
 /**
- * Parses files read from an uploaded folder or file input.
+ * Reads a File object as Data URL (Base64)
  */
-export async function parseUploadedFiles(fileList: File[] | FileList): Promise<ProjectDocument[]> {
+export function readFileAsDataURL(file: File): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(reader.result as string);
+    reader.onerror = () => reject(new Error(`Impossible de lire le fichier ${file.name}`));
+    reader.readAsDataURL(file);
+  });
+}
+
+/**
+ * Extracts and formats worksheets from an Excel workbook (.xlsx, .xls, .xlsm, .csv)
+ */
+export function parseExcelArrayBuffer(arrayBuffer: ArrayBuffer, fileName: string, index = 1): ProjectDocument {
+  try {
+    const workbook = XLSX.read(arrayBuffer, { type: 'array' });
+    const sheetNames = workbook.SheetNames || [];
+    const sections: string[] = [];
+    let totalRows = 0;
+    let hasFinancialKeywords = false;
+    let hasTicketKeywords = false;
+    let hasMilestoneKeywords = false;
+
+    for (const sheetName of sheetNames) {
+      const sheet = workbook.Sheets[sheetName];
+      if (!sheet) continue;
+
+      const rows: any[][] = XLSX.utils.sheet_to_json(sheet, { header: 1, defval: '' });
+      if (rows.length === 0) continue;
+
+      totalRows += rows.length;
+      const headerRow = rows[0] || [];
+      const headerStr = headerRow.map((c: any) => String(c).trim()).join(' | ');
+
+      if (/budget|facture|cout|finance|devis|montant|prix|taux|total|depense|invoice|amount|cost|\$|€|cad/i.test(headerStr)) {
+        hasFinancialKeywords = true;
+      }
+      if (/jira|ticket|bug|incident|severit|priorit|status|issue/i.test(headerStr)) {
+        hasTicketKeywords = true;
+      }
+      if (/jalon|milestone|gantt|planning|echeance|deadline|date|livrable/i.test(headerStr)) {
+        hasMilestoneKeywords = true;
+      }
+
+      // Format clean Markdown table (first 80 rows for clean display)
+      const displayRows = rows.slice(0, 80);
+      const tableMdLines: string[] = [];
+
+      const formattedHeaders = headerRow.map((h: any) => String(h || '-').replace(/\|/g, '/'));
+      tableMdLines.push(`| ${formattedHeaders.join(' | ')} |`);
+      tableMdLines.push(`| ${formattedHeaders.map(() => '---').join(' | ')} |`);
+
+      for (let r = 1; r < displayRows.length; r++) {
+        const row = displayRows[r];
+        if (!row || row.every((cell: any) => cell === '' || cell === null || cell === undefined)) continue;
+        const formattedCells = headerRow.map((_: any, colIdx: number) => {
+          const val = row[colIdx];
+          if (val === null || val === undefined || val === '') return '-';
+          return String(val).replace(/\|/g, '/').replace(/\r?\n/g, ' ');
+        });
+        tableMdLines.push(`| ${formattedCells.join(' | ')} |`);
+      }
+
+      if (rows.length > 80) {
+        tableMdLines.push(`\n*(... et ${rows.length - 80} lignes supplémentaires archivées dans le classeur)*`);
+      }
+
+      sections.push(`### 📊 Feuille : "${sheetName}" (${rows.length} lignes, ${headerRow.length} colonnes)\n\n${tableMdLines.join('\n')}`);
+    }
+
+    const lowerName = fileName.toLowerCase();
+    let category: ProjectDocument['category'] = 'project_doc';
+    let categoryLabel = 'Document Projet (Tableur)';
+
+    if (hasFinancialKeywords || lowerName.includes('budget') || lowerName.includes('finance') || lowerName.includes('facture') || lowerName.includes('devis') || lowerName.includes('cout') || lowerName.includes('invoice') || lowerName.includes('depense')) {
+      category = 'contract_finance';
+      categoryLabel = 'Contrats & Finances (Excel)';
+    } else if (hasTicketKeywords || lowerName.includes('ticket') || lowerName.includes('bug') || lowerName.includes('incident') || lowerName.includes('jira')) {
+      category = 'ticket';
+      categoryLabel = 'Tickets & Incidents (Tableur)';
+    } else if (hasMilestoneKeywords || lowerName.includes('planning') || lowerName.includes('jalon') || lowerName.includes('gantt') || lowerName.includes('suivi')) {
+      category = 'project_doc';
+      categoryLabel = 'Planning & Jalons (Excel)';
+    }
+
+    const summary = `Tableur Excel numérisé (${sheetNames.length} feuille(s) : ${sheetNames.join(', ')} - ${totalRows} lignes extraites). Structure matricielle intégrée.`;
+    const content = `# TABLEUR EXCEL : ${fileName}
+- Nombre de feuilles : ${sheetNames.length} (${sheetNames.join(', ')})
+- Lignes totales analysées : ${totalRows}
+- Format : Classeur Microsoft Excel (.${fileName.split('.').pop() || 'xlsx'})
+- Date de numérisation : ${new Date().toISOString().split('T')[0]}
+
+---
+
+${sections.join('\n\n---\n\n')}`;
+
+    const ext = fileName.split('.').pop()?.toUpperCase() || 'XLSX';
+
+    return {
+      id: `doc-${index}-${fileName.replace(/[^a-zA-Z0-9]/g, '_')}`,
+      name: fileName,
+      category,
+      categoryLabel,
+      date: new Date().toISOString().split('T')[0],
+      author: 'Contrôleur de Gestion / Tableur',
+      summary,
+      content,
+      tags: [categoryLabel, ext, `${sheetNames.length} feuilles`],
+      fileType: ext,
+      relevanceStatus: 'valid'
+    };
+  } catch (err: any) {
+    console.error(`Error parsing Excel in browser for ${fileName}:`, err);
+    return processFileIntoDocument({ name: fileName }, `[Erreur de lecture du tableur Excel ${fileName} : ${err.message}]`, index);
+  }
+}
+
+/**
+ * Sends a file to the backend scanner for OCR, PDF extraction, or AI enrichment
+ */
+async function scanFileWithServer(file: File, base64Data: string, index = 1): Promise<ProjectDocument | null> {
+  try {
+    const res = await fetch('/api/scan-file', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        file: {
+          name: file.name,
+          base64: base64Data,
+          mimeType: file.type || undefined,
+          lastModified: file.lastModified
+        }
+      })
+    });
+
+    if (res.ok) {
+      const data = await res.json();
+      if (data.document) {
+        return data.document as ProjectDocument;
+      }
+    }
+  } catch (e) {
+    console.warn(`Server scanning not reachable for ${file.name}, using local processing:`, e);
+  }
+  return null;
+}
+
+/**
+ * Parses files read from an uploaded folder or file input.
+ * Supports PDF, Excel (.xlsx, .xls), Images (.png, .jpg), Emails (.eml), and Text.
+ */
+export async function parseUploadedFiles(
+  fileList: File[] | FileList,
+  onProgress?: (message: string, current: number, total: number) => void
+): Promise<ProjectDocument[]> {
   const files = Array.from(fileList);
   const parsedDocs: ProjectDocument[] = [];
 
@@ -401,12 +555,98 @@ export async function parseUploadedFiles(fileList: File[] | FileList): Promise<P
       continue;
     }
 
+    const fileName = file.name;
+    const ext = fileName.split('.').pop()?.toLowerCase() || '';
+
     try {
+      // 1. Excel Spreadsheets (.xlsx, .xls, .xlsm, .csv)
+      if (ext === 'xlsx' || ext === 'xls' || ext === 'xlsm') {
+        onProgress?.(`Extraction des feuilles Excel : ${fileName}...`, i + 1, files.length);
+        const arrayBuf = await file.arrayBuffer();
+        const localDoc = parseExcelArrayBuffer(arrayBuf, fileName, i + 1);
+
+        // Optionally send to server for deeper multimodal analysis
+        try {
+          const dataUrl = await readFileAsDataURL(file);
+          const serverDoc = await scanFileWithServer(file, dataUrl, i + 1);
+          if (serverDoc && serverDoc.content) {
+            parsedDocs.push(serverDoc);
+            continue;
+          }
+        } catch {}
+
+        parsedDocs.push(localDoc);
+        continue;
+      }
+
+      // 2. PDF Documents (.pdf)
+      if (ext === 'pdf') {
+        onProgress?.(`Numérisation du document PDF : ${fileName}...`, i + 1, files.length);
+        const dataUrl = await readFileAsDataURL(file);
+        const serverDoc = await scanFileWithServer(file, dataUrl, i + 1);
+
+        if (serverDoc) {
+          parsedDocs.push(serverDoc);
+          continue;
+        }
+
+        // Fallback if server is not available
+        parsedDocs.push({
+          id: `doc-${i + 1}-${fileName.replace(/[^a-zA-Z0-9]/g, '_')}`,
+          name: fileName,
+          category: 'project_doc',
+          categoryLabel: 'Document Projet (PDF)',
+          date: new Date(file.lastModified || Date.now()).toISOString().split('T')[0],
+          author: 'Équipe Projet',
+          summary: `Document PDF indexé : ${fileName} (${(file.size / 1024).toFixed(1)} Ko).`,
+          content: `# DOCUMENT PDF : ${fileName}\n- Taille : ${(file.size / 1024).toFixed(1)} Ko\n- Date : ${new Date(file.lastModified || Date.now()).toISOString().split('T')[0]}\n\n*(Document PDF indexé dans la base documentaire du projet).*`,
+          tags: ['PDF', 'Document'],
+          fileType: 'PDF',
+          relevanceStatus: 'valid',
+          fileSize: file.size
+        });
+        continue;
+      }
+
+      // 3. Images & Screenshots (.png, .jpg, .jpeg, .webp)
+      if (['png', 'jpg', 'jpeg', 'webp', 'gif', 'bmp'].includes(ext)) {
+        onProgress?.(`Analyse visuelle et OCR : ${fileName}...`, i + 1, files.length);
+        const dataUrl = await readFileAsDataURL(file);
+        const serverDoc = await scanFileWithServer(file, dataUrl, i + 1);
+
+        if (serverDoc) {
+          parsedDocs.push(serverDoc);
+          continue;
+        }
+
+        // Local fallback with previewUrl
+        const imageType = ext.toUpperCase();
+        parsedDocs.push({
+          id: `doc-${i + 1}-${fileName.replace(/[^a-zA-Z0-9]/g, '_')}`,
+          name: fileName,
+          category: 'architecture',
+          categoryLabel: 'Schéma & Image Projet',
+          date: new Date(file.lastModified || Date.now()).toISOString().split('T')[0],
+          author: 'Équipe Projet',
+          summary: `Image / Schéma de projet indexé : ${fileName}. Aperçu visuel sauvegardé dans la mémoire opérationnelle.`,
+          content: `# VISUEL PROJET : ${fileName}\n- Format : Image ${imageType} (${(file.size / 1024).toFixed(1)} Ko)\n- Statut : Enregistré dans la base documentaire.\n- Aperçu : Accessible dans le visualiseur de documents.`,
+          tags: ['Image', imageType, 'Schéma'],
+          fileType: imageType,
+          relevanceStatus: 'valid',
+          previewUrl: dataUrl,
+          fileSize: file.size
+        });
+        continue;
+      }
+
+      // 4. Text / EML / Markdown / CSV / JSON files
+      onProgress?.(`Lecture du document : ${fileName}...`, i + 1, files.length);
       const textContent = await readFileContent(file);
       const doc = processFileIntoDocument(file, textContent, i + 1);
       parsedDocs.push(doc);
+
     } catch (err) {
-      console.warn(`Could not read file ${file.name}:`, err);
+      console.warn(`Could not read file ${fileName}:`, err);
     }
   }
 

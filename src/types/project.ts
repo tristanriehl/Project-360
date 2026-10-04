@@ -10,6 +10,8 @@ export interface ProjectDocument {
   tags: string[];
   fileType: string;
   relevanceStatus?: 'valid' | 'outdated' | 'superseded' | 'draft';
+  previewUrl?: string;
+  fileSize?: number;
 }
 
 export interface Decision {

@@ -1,6 +1,7 @@
 import React from 'react';
 import { FileText, ExternalLink, CheckCircle2, AlertCircle, Sparkles, Copy, Check } from 'lucide-react';
 import { ProjectDocument } from '../types/project';
+import { cleanUtfString } from '../utils/cleanUtf';
 
 interface FormattedChatMessageProps {
   content: string;
@@ -15,12 +16,14 @@ export const FormattedChatMessage: React.FC<FormattedChatMessageProps> = ({
   onSelectDocument,
   isUser = false
 }) => {
+  const cleanContent = cleanUtfString(content || '');
+
   if (isUser) {
-    return <div className="whitespace-pre-wrap font-medium">{content}</div>;
+    return <div className="whitespace-pre-wrap font-medium">{cleanContent}</div>;
   }
 
   // Parse lines into rich blocks
-  const lines = content.split(/\r?\n/);
+  const lines = cleanContent.split(/\r?\n/);
   const elements: React.ReactNode[] = [];
   let inCodeBlock = false;
   let codeBlockContent: string[] = [];

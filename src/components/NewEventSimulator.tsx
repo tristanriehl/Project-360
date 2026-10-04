@@ -17,6 +17,7 @@ import {
   X
 } from 'lucide-react';
 import { NewEventImpact, ProjectAnalysis, ProjectDocument } from '../types/project';
+import { parseUploadedFiles } from '../utils/folderParser';
 
 interface NewEventSimulatorProps {
   analysis: ProjectAnalysis;
@@ -94,21 +95,39 @@ Action requise : Mise à niveau immédiate de la version v4.2.1 vers v5.0.0 et r
     setUploadedFileName(null);
   };
 
-  const handleProcessFile = (file: File) => {
+  const handleProcessFile = async (file: File) => {
     if (!file) return;
-    setUploadedFileName(`${file.name} (${(file.size / 1024).toFixed(1)} Ko)`);
+    setUploadedFileName(`${file.name} (${(file.size / 1024).toFixed(1)} Ko) - Numérisation...`);
+
+    try {
+      const parsedList = await parseUploadedFiles([file]);
+      if (parsedList.length > 0) {
+        const doc = parsedList[0];
+        setContent(doc.content);
+        setTitle(doc.summary || file.name.replace(/\.[^/.]+$/, '').replace(/[_-]/g, ' '));
+        if (doc.author && doc.author !== 'Équipe Projet') {
+          setAuthor(doc.author);
+        }
+        if (doc.category === 'email') setCategory('email');
+        else if (doc.category === 'ticket') setCategory('ticket');
+        else setCategory('project_doc');
+
+        setUploadedFileName(`${file.name} (${(file.size / 1024).toFixed(1)} Ko) - Prêt`);
+        return;
+      }
+    } catch (err) {
+      console.warn('Scan error in simulator:', err);
+    }
 
     const reader = new FileReader();
     reader.onload = (e) => {
       const text = (e.target?.result as string) || '';
       setContent(text);
 
-      // Auto-derive clean title if empty or generic
       const cleanName = file.name.replace(/\.[^/.]+$/, '').replace(/[_-]/g, ' ');
       const capitalizedTitle = cleanName.charAt(0).toUpperCase() + cleanName.slice(1);
       setTitle(capitalizedTitle);
 
-      // Auto-detect category
       const lowerName = file.name.toLowerCase();
       if (lowerName.endsWith('.eml') || text.includes('De:') || text.includes('From:')) {
         setCategory('email');
@@ -121,6 +140,7 @@ Action requise : Mise à niveau immédiate de la version v4.2.1 vers v5.0.0 et r
       } else {
         setCategory('project_doc');
       }
+      setUploadedFileName(`${file.name} (${(file.size / 1024).toFixed(1)} Ko)`);
     };
     reader.readAsText(file);
   };
@@ -243,7 +263,7 @@ Action requise : Mise à niveau immédiate de la version v4.2.1 vers v5.0.0 et r
           type="file"
           ref={fileInputRef}
           onChange={handleFileChange}
-          accept=".txt,.eml,.csv,.log,.md,.json"
+          accept=".pdf,.xlsx,.xls,.xlsm,.png,.jpg,.jpeg,.webp,.eml,.msg,.txt,.csv,.log,.md,.json"
           className="hidden"
         />
 
@@ -251,9 +271,9 @@ Action requise : Mise à niveau immédiate de la version v4.2.1 vers v5.0.0 et r
         <div>
           <div className="flex items-center justify-between mb-1.5">
             <label className="block text-xs font-bold text-slate-700 dark:text-slate-300">
-              Téléverser ou Glisser un document source
+              Téléverser ou Glisser un document source (PDF, Excel, Image PNG/JPG, Courriel...)
             </label>
-            <span className="text-[10px] text-slate-400">.eml, .txt, .csv, .log, .md, .json</span>
+            <span className="text-[10px] text-slate-400">.pdf, .xlsx, .png, .eml, .txt</span>
           </div>
 
           {!uploadedFileName ? (
