@@ -1,4 +1,5 @@
 import { ProjectDocument } from '../types/project';
+import * as XLSX from 'xlsx';
 
 /**
  * Decodes RFC 2047 MIME encoded words (e.g. =?UTF-8?B?...?= or =?UTF-8?Q?...?= or =?ISO-8859-1?Q?...?=)
@@ -422,7 +423,22 @@ export async function parseUploadedFiles(fileList: File[] | FileList): Promise<P
 /**
  * Reads text content from a File object.
  */
-function readFileContent(file: File): Promise<string> {
+/**
+ * Reads text content from a File object, handles excel sheets locally,
+ * and calls the server API to parse PDF and PNG/JPG files via Gemini.
+ */
+async function readFileContent(file: File): Promise<string> {
+  const ext = file.name.split('.').pop()?.toLowerCase() || '';
+
+  if (ext === 'xlsx' || ext === 'xls') {
+    return readXlsxContent(file);
+  }
+
+  if (ext === 'png' || ext === 'jpg' || ext === 'jpeg' || ext === 'pdf') {
+    return readBinaryFileViaServer(file);
+  }
+
+  // Standard text/code reader for everything else
   return new Promise((resolve) => {
     const reader = new FileReader();
 
@@ -446,6 +462,118 @@ function readFileContent(file: File): Promise<string> {
     };
 
     reader.readAsText(file);
+  });
+}
+
+/**
+ * Reads and parses highly structured Excel files locally into beautiful Markdown tables.
+ */
+function readXlsxContent(file: File): Promise<string> {
+  return new Promise((resolve) => {
+    const reader = new FileReader();
+    reader.onload = (e) => {
+      try {
+        const data = e.target?.result;
+        if (!data) {
+          resolve(`[Fichier Excel ${file.name} vide]`);
+          return;
+        }
+        const workbook = XLSX.read(data, { type: 'array' });
+        let fullText = `--- FICHIER TABLEUR EXCEL : ${file.name} ---\n`;
+
+        workbook.SheetNames.forEach((sheetName) => {
+          const worksheet = workbook.Sheets[sheetName];
+          const csv = XLSX.utils.sheet_to_csv(worksheet);
+          if (csv.trim()) {
+            fullText += `\n### Onglet/Feuille : ${sheetName}\n\n`;
+            const lines = csv.split('\n');
+            const formattedLines = lines
+              .filter(line => line.trim().length > 0)
+              .map(line => {
+                // simple split avoiding issues with commas inside quotes if possible
+                // for robustness, split by comma or tab
+                const cells = line.split(/,(?=(?:(?:[^"]*"){2})*[^"]*$)/);
+                const cleanCells = cells.map(c => c.replace(/^"|"$/g, '').trim());
+                return '| ' + cleanCells.join(' | ') + ' |';
+              });
+
+            if (formattedLines.length > 0) {
+              // Add simple header separator line after the first row
+              const headerSep = '| ' + formattedLines[0].split('|').slice(1, -1).map(() => '---').join(' | ') + ' |';
+              const rows = [formattedLines[0], headerSep, ...formattedLines.slice(1)];
+              fullText += rows.slice(0, 300).join('\n') + '\n';
+              if (lines.length > 300) {
+                fullText += `\n... [${lines.length - 300} lignes supplémentaires masquées pour optimiser la mémoire] ...\n`;
+              }
+            }
+          }
+        });
+
+        resolve(fullText);
+      } catch (err: any) {
+        console.error('Error parsing Excel file:', err);
+        resolve(`[Erreur de lecture du fichier Excel ${file.name} : ${err.message}]`);
+      }
+    };
+    reader.onerror = () => {
+      resolve(`[Erreur de chargement du fichier Excel ${file.name}]`);
+    };
+    reader.readAsArrayBuffer(file);
+  });
+}
+
+/**
+ * Reads binary files (PDFs and PNGs) as base64 and forwards them to Gemini server-side endpoint.
+ */
+function readBinaryFileViaServer(file: File): Promise<string> {
+  return new Promise((resolve) => {
+    const reader = new FileReader();
+    reader.onload = async (e) => {
+      try {
+        const dataUrl = e.target?.result as string;
+        if (!dataUrl) {
+          resolve(`[Fichier ${file.name} vide]`);
+          return;
+        }
+
+        const base64 = dataUrl.split(',')[1];
+        let mimeType = file.type;
+        if (!mimeType) {
+          const ext = file.name.split('.').pop()?.toLowerCase();
+          if (ext === 'pdf') mimeType = 'application/pdf';
+          else if (ext === 'png') mimeType = 'image/png';
+          else if (ext === 'jpg' || ext === 'jpeg') mimeType = 'image/jpeg';
+          else mimeType = 'application/octet-stream';
+        }
+
+        const res = await fetch('/api/parse-binary-file', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json'
+          },
+          body: JSON.stringify({
+            base64,
+            mimeType,
+            filename: file.name
+          })
+        });
+
+        if (res.ok) {
+          const data = await res.json();
+          resolve(data.text || `[Aucun texte extrait du fichier ${file.name}]`);
+        } else {
+          const errData = await res.json().catch(() => ({}));
+          resolve(`[Fichier ${file.name} - En attente de scan : ${errData.error || res.statusText}]`);
+        }
+      } catch (err: any) {
+        console.error('Error reading binary file via server:', err);
+        resolve(`[Fichier ${file.name} - Analyse locale : ${err.message}]`);
+      }
+    };
+    reader.onerror = () => {
+      resolve(`[Erreur de lecture du fichier ${file.name}]`);
+    };
+    reader.readAsDataURL(file);
   });
 }
 
@@ -487,31 +615,66 @@ export function processFileIntoDocument(file: { name: string; lastModified?: num
     summary = `Courriel : ${parsedEml.subject} (De : ${author}${parsedEml.recipient ? ` à ${parsedEml.recipient}` : ''})`;
     content = parsedEml.formattedContent;
   } 
-  // 2. Meeting Notes / Transcripts
+  // 2. Excel Spreadsheets
+  else if (ext === 'xlsx' || ext === 'xls') {
+    const isFinance = lowerName.includes('budget') || lowerName.includes('devis') || lowerName.includes('finance') || lowerName.includes('invoice') || lowerName.includes('facture') || lowerName.includes('tarif') || lowerName.includes('coût') || lowerName.includes('cout');
+    category = isFinance ? 'contract_finance' : 'project_doc';
+    categoryLabel = isFinance ? 'Tableur Budget / Finances' : 'Tableur Opérationnel (Excel)';
+    summary = `Données structurées extraites du chiffrier : ${fileName}`;
+  }
+  // 3. Images (Scan / OCR)
+  else if (ext === 'png' || ext === 'jpg' || ext === 'jpeg') {
+    const isArch = lowerName.includes('arch') || lowerName.includes('flux') || lowerName.includes('schema') || lowerName.includes('diagram') || lowerName.includes('wireframe') || lowerName.includes('maquette');
+    category = isArch ? 'architecture' : 'archive';
+    categoryLabel = isArch ? 'Schéma Architecture / UI' : 'Image / Capture d\'écran';
+    summary = `Scan visuel et retranscription textuelle du fichier image : ${fileName}`;
+  }
+  // 4. PDF Documents (RAG analysis)
+  else if (ext === 'pdf') {
+    const isMeeting = lowerName.includes('cr_') || lowerName.includes('reunion') || lowerName.includes('meeting');
+    const isFinance = lowerName.includes('facture') || lowerName.includes('contrat') || lowerName.includes('budget') || lowerName.includes('devis') || lowerName.includes('finance') || lowerName.includes('inv-');
+    const isArch = lowerName.includes('adr') || lowerName.includes('arch') || lowerName.includes('spec') || lowerName.includes('tech');
+
+    if (isMeeting) {
+      category = 'meeting';
+      categoryLabel = 'CR Réunion (PDF)';
+    } else if (isFinance) {
+      category = 'contract_finance';
+      categoryLabel = 'Contrat / Finance (PDF)';
+    } else if (isArch) {
+      category = 'architecture';
+      categoryLabel = 'Spécification / Architecture (PDF)';
+    } else {
+      category = 'project_doc';
+      categoryLabel = 'Rapport / Document PDF';
+    }
+    summary = `Document numérisé PDF : ${fileName.replace(/\.[^/.]+$/, '').replace(/[_-]/g, ' ')}`;
+  }
+  // 5. Meeting Notes / Transcripts (Plain text)
   else if (lowerName.includes('cr_') || lowerName.includes('cr-') || lowerName.includes('reunion') || lowerName.includes('meeting') || lowerName.includes('copil') || lowerName.includes('pv_') || lowerName.includes('comite') || lowerName.includes('transcript')) {
     category = 'meeting';
     categoryLabel = 'Compte-rendu Réunion';
     summary = `Compte-rendu : ${fileName.replace(/\.[^/.]+$/, '').replace(/[_-]/g, ' ')}`;
   }
-  // 3. Tickets / Bugs / JIRA
+  // 6. Tickets / Bugs / JIRA (Plain text)
   else if (lowerName.includes('jira') || lowerName.includes('bug') || lowerName.includes('ticket') || lowerName.includes('perf-') || lowerName.includes('acc-') || lowerName.includes('sec-') || lowerName.includes('int-') || lowerName.includes('incident')) {
     category = 'ticket';
     categoryLabel = 'Ticket & Incident';
     summary = `Ticket d'incident : ${fileName}`;
   }
-  // 4. Architecture / ADR / Specs
+  // 7. Architecture / ADR / Specs (Plain text)
   else if (lowerName.includes('adr') || lowerName.includes('arch') || lowerName.includes('spec') || lowerName.includes('tech')) {
     category = 'architecture';
     categoryLabel = 'Architecture (ADR)';
     summary = `Décision d'architecture : ${fileName}`;
   }
-  // 5. Contracts & Finance
+  // 8. Contracts & Finance (Plain text)
   else if (lowerName.includes('facture') || lowerName.includes('contrat') || lowerName.includes('budget') || lowerName.includes('devis') || lowerName.includes('finance') || lowerName.includes('inv-') || lowerName.includes('cr-')) {
     category = 'contract_finance';
     categoryLabel = 'Contrat & Finances';
     summary = `Pièce comptable / contractuelle : ${fileName}`;
   }
-  // 6. Teams / Chat
+  // 9. Teams / Chat (Plain text)
   else if (lowerName.includes('teams') || lowerName.includes('chat') || lowerName.includes('slack')) {
     category = 'teams';
     categoryLabel = 'Discussion Teams';

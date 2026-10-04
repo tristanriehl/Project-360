@@ -1,6 +1,7 @@
 import React from 'react';
 import { AlertTriangle, CheckCircle2, XCircle, ExternalLink, Lightbulb } from 'lucide-react';
 import { ProjectAnalysis, ProjectDocument } from '../types/project';
+import { cleanUtfString } from '../utils/cleanUtf';
 
 interface ContradictionsDetectorProps {
   analysis: ProjectAnalysis;
@@ -96,7 +97,7 @@ export const ContradictionsDetector: React.FC<ContradictionsDetectorProps> = ({
                       <span>{item?.sourceA?.date || ''}</span>
                     </div>
                     <p className="font-mono text-[11px] text-slate-700 dark:text-slate-300 italic bg-white dark:bg-slate-900 p-2 rounded border border-slate-200 dark:border-slate-800">
-                      "{item?.sourceA?.statement || 'Version initiale'}"
+                      "{cleanUtfString(item?.sourceA?.statement || 'Version initiale')}"
                     </p>
                     {docA && (
                       <button
@@ -117,7 +118,7 @@ export const ContradictionsDetector: React.FC<ContradictionsDetectorProps> = ({
                       <span>{item?.sourceB?.date || ''}</span>
                     </div>
                     <p className="font-mono text-[11px] text-slate-700 dark:text-slate-300 italic bg-white dark:bg-slate-900 p-2 rounded border border-blue-100 dark:border-blue-900/30">
-                      "{item?.sourceB?.statement || 'Version révisée ou contestée'}"
+                      "{cleanUtfString(item?.sourceB?.statement || 'Version révisée ou contestée')}"
                     </p>
                     {docB && (
                       <button

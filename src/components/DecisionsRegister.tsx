@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { Scale, CheckCircle2, FileText, ExternalLink, Search, Quote, Calendar, User } from 'lucide-react';
 import { Decision, ProjectAnalysis, ProjectDocument } from '../types/project';
+import { cleanUtfString } from '../utils/cleanUtf';
 
 interface DecisionsRegisterProps {
   analysis: ProjectAnalysis;
@@ -152,7 +153,7 @@ export const DecisionsRegister: React.FC<DecisionsRegisterProps> = ({
                   <div className="p-2.5 rounded-lg bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-xs">
                     <span className="font-semibold text-slate-500 text-[10px] uppercase block mb-0.5">Preuve textuelle :</span>
                     <p className="font-mono italic text-slate-800 dark:text-slate-200 text-[11px]">
-                      "{dec.evidenceQuote}"
+                      "{cleanUtfString(dec.evidenceQuote)}"
                     </p>
                   </div>
                 )}
