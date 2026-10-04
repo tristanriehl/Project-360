@@ -51,7 +51,6 @@ export const DashboardOverview: React.FC<DashboardOverviewProps> = ({
     if (val === undefined || val === null) return 'Non renseigné';
     const str = String(val).trim();
     if (!str || str === '0' || str === '0 $') return '0 $';
-    if (str === 'Non renseigné') return 'Non renseigné';
     if (str.includes('$') || str.includes('CAD') || str.includes('EUR') || str.includes('USD')) return str;
     return `${str} $ CAD`;
   };
@@ -406,19 +405,16 @@ export const DashboardOverview: React.FC<DashboardOverviewProps> = ({
         <div className="space-y-6">
           
           {/* Financials card */}
-          <div 
-            onClick={() => onNavigateTab('finances')}
-            className="p-5 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-sm hover:shadow-md hover:border-emerald-400 transition-all cursor-pointer group"
-          >
+          <div className="p-5 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-sm">
             <div className="flex items-center justify-between mb-3">
               <div className="flex items-center gap-2">
                 <DollarSign className="w-4 h-4 text-emerald-600" />
-                <h3 className="text-sm font-bold text-slate-900 dark:text-white group-hover:text-emerald-600 transition-colors">
+                <h3 className="text-sm font-bold text-slate-900 dark:text-white">
                   Suivi Financier &amp; Factures
                 </h3>
               </div>
-              <span className="text-[10px] font-bold px-2 py-0.5 rounded bg-emerald-100 dark:bg-emerald-950 text-emerald-800 dark:text-emerald-300 flex items-center gap-1">
-                Ouvrir le panneau <ArrowRight className="w-2.5 h-2.5" />
+              <span className="text-[10px] font-bold px-2 py-0.5 rounded bg-blue-100 dark:bg-blue-950 text-blue-700 dark:text-blue-300">
+                Synthèse
               </span>
             </div>
 

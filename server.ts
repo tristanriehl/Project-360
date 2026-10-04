@@ -1006,64 +1006,6 @@ app.post('/api/ingest-files', async (req: Request, res: Response) => {
   }
 });
 
-// 11. POST /api/parse-binary-file - Extract content of PDF, PNG, JPEG with Gemini
-app.post('/api/parse-binary-file', async (req: Request, res: Response) => {
-  try {
-    const { base64, mimeType, filename } = req.body;
-    if (!base64 || !mimeType) {
-      return res.status(400).json({ error: 'La base64 et le mimeType sont requis.' });
-    }
-
-    if (!apiKey) {
-      return res.json({
-        text: `[Fichier ${filename || 'binaire'} - Mode local sans clé d'API. Pour activer la numérisation complète de documents (PDF/PNG), veuillez configurer votre clé d'API Gemini]`
-      });
-    }
-
-    const cleanBase64 = base64.replace(/^data:[^;]+;base64,/, '');
-
-    const filePart = {
-      inlineData: {
-        mimeType: mimeType,
-        data: cleanBase64
-      }
-    };
-
-    let prompt = '';
-    if (mimeType.startsWith('image/')) {
-      prompt = `Tu es un spécialiste de l'analyse visuelle et de l'extraction documentaire (OCR).
-Examine très attentivement cette image (${filename || 'Image'}) et extrait toutes ses informations sous format textuel structuré (Markdown) :
-- S'il s'agit d'un organigramme, d'une architecture technique ou d'un flux, décris tous ses composants, ses relations, ses flèches et ses annotations.
-- S'il s'agit d'un tableau financier ou technique, retranscris-le sous forme de tableau Markdown de manière très fidèle.
-- Retranscris tous les blocs de texte, les notes manuscrites, les post-it, les dates et les noms d'utilisateurs/responsables visibles.
-- Si l'image est de mauvaise qualité, fais de ton mieux pour déchiffrer le texte de manière exhaustive.`;
-    } else if (mimeType === 'application/pdf') {
-      prompt = `Tu es un analyste de documents PDF et RAG ultra-précis.
-Analyse et extrait TOUT le contenu textuel et structurel de ce document PDF (${filename || 'Document.pdf'}) au format Markdown :
-- Retranscris fidèlement les différentes sections, titres, sous-titres, dates, paragraphes et annexes.
-- Retranscris les tableaux de données sous forme de tableaux Markdown.
-- Extrait les éléments clés du projet (jalons, décisions, budgets, contrats, risques, actions requises, livrables, contradictions de planning ou de budget).
-- Ne résume pas de façon excessive : assure-toi de garder toutes les citations précises et informations textuelles importantes pour indexer ce fichier dans le Cerveau du Projet.`;
-    } else {
-      prompt = `Analyse et extrait le contenu textuel complet de ce fichier (${filename || 'Document'}) au format Markdown. Conserve toutes les données importantes pour un système RAG.`;
-    }
-
-    const response = await ai.models.generateContent({
-      model: 'gemini-3.8-flash',
-      contents: [
-        filePart,
-        { text: prompt }
-      ]
-    });
-
-    const parsedText = response.text || `[Aucun texte n'a pu être extrait de ${filename}]`;
-    res.json({ text: parsedText });
-  } catch (err: any) {
-    console.error('Error parsing binary file with Gemini:', err);
-    res.status(500).json({ error: `Erreur d'extraction par Gemini : ${err.message || err}` });
-  }
-});
-
 // Vite Middleware for Full-stack Dev
 async function startServer() {
   if (process.env.NODE_ENV !== 'production') {

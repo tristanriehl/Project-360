@@ -264,7 +264,6 @@ export const DatasetImportScreen: React.FC<DatasetImportScreenProps> = ({
         type="file"
         ref={fileInputRef}
         multiple
-        accept=".txt,.pdf,.eml,.md,.csv,.json,.xlsx,.xls,.png,.jpg,.jpeg,.webp,.docx,.pptx"
         onChange={handleFileInputChange}
         className="hidden"
       />
