@@ -1,12 +1,12 @@
 import React, { useState } from 'react';
-import { Network, Cpu, Layers, Workflow } from 'lucide-react';
+import { FolderGit2, Cpu, Layers, Workflow } from 'lucide-react';
 import { ProjectAnalysis, ProjectDocument } from '../types/project';
-import { CombinedBrainAndSources } from './CombinedBrainAndSources';
+import { DocumentManager } from './DocumentManager';
 import { ArchitectureAdvisor } from './ArchitectureAdvisor';
 import { SystemFlowchart } from './SystemFlowchart';
 import { useLanguage } from '../context/LanguageContext';
 
-export type MoreSubTabType = 'flowchart' | 'brain_sources' | 'advisor';
+export type MoreSubTabType = 'flowchart' | 'sources' | 'advisor';
 
 interface MorePageProps {
   analysis: ProjectAnalysis;
@@ -56,7 +56,7 @@ export const MorePage: React.FC<MorePageProps> = ({
         <div className="flex items-center gap-1.5 p-1 bg-slate-100 dark:bg-slate-800/80 rounded-xl border border-slate-200 dark:border-slate-700/80 self-start md:self-auto">
           <button
             onClick={() => setActiveSubTab('flowchart')}
-            className={`flex items-center gap-2 px-3.5 py-2 rounded-lg text-xs font-semibold transition-all ${
+            className={`flex items-center gap-2 px-3.5 py-2 rounded-lg text-xs font-semibold transition-all cursor-pointer ${
               activeSubTab === 'flowchart'
                 ? 'bg-white dark:bg-slate-900 text-blue-600 dark:text-blue-400 shadow-xs'
                 : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200'
@@ -67,20 +67,20 @@ export const MorePage: React.FC<MorePageProps> = ({
           </button>
 
           <button
-            onClick={() => setActiveSubTab('brain_sources')}
-            className={`flex items-center gap-2 px-3.5 py-2 rounded-lg text-xs font-semibold transition-all ${
-              activeSubTab === 'brain_sources'
+            onClick={() => setActiveSubTab('sources')}
+            className={`flex items-center gap-2 px-3.5 py-2 rounded-lg text-xs font-semibold transition-all cursor-pointer ${
+              activeSubTab === 'sources'
                 ? 'bg-white dark:bg-slate-900 text-blue-600 dark:text-blue-400 shadow-xs'
                 : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200'
             }`}
           >
-            <Network className="w-3.5 h-3.5" />
-            <span>{t('more_tab_brain_sources')}</span>
+            <FolderGit2 className="w-3.5 h-3.5" />
+            <span>{t('more_tab_sources')} ({documents.length})</span>
           </button>
 
           <button
             onClick={() => setActiveSubTab('advisor')}
-            className={`flex items-center gap-2 px-3.5 py-2 rounded-lg text-xs font-semibold transition-all ${
+            className={`flex items-center gap-2 px-3.5 py-2 rounded-lg text-xs font-semibold transition-all cursor-pointer ${
               activeSubTab === 'advisor'
                 ? 'bg-white dark:bg-slate-900 text-purple-600 dark:text-purple-400 shadow-xs'
                 : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200'
@@ -95,9 +95,8 @@ export const MorePage: React.FC<MorePageProps> = ({
       {/* Main Subtab Content */}
       <div>
         {activeSubTab === 'flowchart' && <SystemFlowchart />}
-        {activeSubTab === 'brain_sources' && (
-          <CombinedBrainAndSources
-            analysis={analysis}
+        {activeSubTab === 'sources' && (
+          <DocumentManager
             documents={documents}
             onSelectDocument={onSelectDocument}
             onRefreshAnalysis={onRefreshAnalysis}

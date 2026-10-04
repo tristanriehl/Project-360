@@ -12,10 +12,9 @@ export const translations = {
     nav_new_event: 'New Event',
     nav_decisions: 'Decisions & Evidence',
     nav_contradictions: 'Contradictions',
-    nav_finances: 'Finances & Budget',
     nav_timeline: 'Timeline',
     nav_briefing: 'Executive Briefing',
-    nav_more: 'More (Flow & Graph)',
+    nav_more: 'More (Architecture & Docs)',
     nav_local_demo: 'Local Demo',
     nav_resynthesize: 'Re-synthesize',
     nav_analyzing: 'Analyzing...',
@@ -62,9 +61,9 @@ export const translations = {
 
     // More Page
     more_title: 'Advanced Technical Center',
-    more_subtitle: 'Mermaid.js diagrams, relational knowledge graph, and LLM comparison benchmark',
+    more_subtitle: 'Mermaid.js architecture flowcharts, document repository, and LLM comparison benchmark',
     more_tab_flowchart: 'Architecture & Flow (Mermaid)',
-    more_tab_brain_sources: 'Brain & Sources',
+    more_tab_sources: 'Source Documents',
     more_tab_advisor: 'Frontier vs Local LLM',
 
     // Common
@@ -82,10 +81,9 @@ export const translations = {
     nav_new_event: 'Nouvel Événement',
     nav_decisions: 'Décisions & Preuves',
     nav_contradictions: 'Contradictions',
-    nav_finances: 'Finances & Budget',
     nav_timeline: 'Chronologie',
     nav_briefing: 'Briefing Exécutif',
-    nav_more: 'More (Flux & Graphe)',
+    nav_more: 'More (Architecture & Docs)',
     nav_local_demo: 'Démo Locale',
     nav_resynthesize: 'Re-synthétiser',
     nav_analyzing: 'Analyse...',
@@ -132,9 +130,9 @@ export const translations = {
 
     // More Page
     more_title: 'Centre Technique Avancé',
-    more_subtitle: 'Diagrammes Mermaid.js, graphe de connaissances relationnel et benchmark comparatif des LLMs',
+    more_subtitle: 'Schémas d\'architecture Mermaid.js, répertoire documentaire et benchmark comparatif des LLMs',
     more_tab_flowchart: 'Architecture & Flux (Mermaid)',
-    more_tab_brain_sources: 'Cerveau & Sources',
+    more_tab_sources: 'Sources Documentaires',
     more_tab_advisor: 'Frontier vs Local LLM',
 
     // Common
