@@ -254,11 +254,11 @@ export const ExecutiveBriefing: React.FC<ExecutiveBriefingProps> = ({
                       <div className="text-sm font-black text-slate-900 dark:text-white mt-1">{financials.contractTotal}</div>
                     </div>
                     <div className="p-3 rounded-xl bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700">
-                      <div className="text-[10px] text-slate-400">Total Facturé</div>
+                      <div className="text-[10px] text-slate-400">Total Facturé {financials.percentInvoiced !== undefined ? `(${financials.percentInvoiced}%)` : ''}</div>
                       <div className="text-sm font-black text-slate-900 dark:text-white mt-1">{financials.invoicedTotal}</div>
                     </div>
                     <div className="p-3 rounded-xl bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-200 dark:border-emerald-800">
-                      <div className="text-[10px] text-emerald-700 dark:text-emerald-300">Total Acquitté</div>
+                      <div className="text-[10px] text-emerald-700 dark:text-emerald-300">Total Acquitté {financials.percentPaid !== undefined ? `(${financials.percentPaid}%)` : ''}</div>
                       <div className="text-sm font-black text-emerald-600 dark:text-emerald-400 mt-1">{financials.paidTotal}</div>
                     </div>
                     <div className="p-3 rounded-xl bg-rose-50 dark:bg-rose-950/40 border border-rose-200 dark:border-rose-800">
@@ -266,6 +266,14 @@ export const ExecutiveBriefing: React.FC<ExecutiveBriefingProps> = ({
                       <div className="text-sm font-black text-rose-600 dark:text-rose-400 mt-1">{financials.disputedAmount}</div>
                     </div>
                   </div>
+                  {financials.numericRemaining !== undefined && (
+                    <div className="mt-2 p-2 rounded-lg bg-slate-50 dark:bg-slate-800 border border-slate-200/60 dark:border-slate-700/60 flex items-center justify-between text-[11px]">
+                      <span className="text-slate-500">Solde budgétaire restant calculé :</span>
+                      <span className="font-bold text-slate-900 dark:text-white">
+                        {new Intl.NumberFormat('fr-CA', { maximumFractionDigits: 0 }).format(financials.numericRemaining)} $ CAD
+                      </span>
+                    </div>
+                  )}
                 </div>
 
                 {/* 4. Risques résiduels */}

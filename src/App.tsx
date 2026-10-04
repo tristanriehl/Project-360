@@ -5,15 +5,16 @@ import { RagChat } from './components/RagChat';
 import { NewEventSimulator } from './components/NewEventSimulator';
 import { DecisionsRegister } from './components/DecisionsRegister';
 import { ContradictionsDetector } from './components/ContradictionsDetector';
-import { FinancesPanel } from './components/FinancesPanel';
 import { TimelineView } from './components/TimelineView';
 import { ExecutiveBriefing } from './components/ExecutiveBriefing';
 import { DocumentViewerModal } from './components/DocumentViewerModal';
 import { LocalDemoModal } from './components/LocalDemoModal';
 import { MorePage } from './components/MorePage';
 import { DatasetImportScreen } from './components/DatasetImportScreen';
+import { ProjectBrainGraph } from './components/ProjectBrainGraph';
 import { ErrorBoundary } from './components/ErrorBoundary';
 import { normalizeAnalysis } from './utils/normalizeAnalysis';
+import { synthesizeDatasetLocally } from './utils/datasetSynthesizer';
 import { EMPTY_PROJECT_ANALYSIS } from './data/sampleProjects';
 import { ProjectAnalysis, ProjectDocument } from './types/project';
 import { FolderUp, Trash2, CheckCircle2 } from 'lucide-react';
@@ -88,6 +89,38 @@ export default function App() {
 
   const handleDocumentsAdded = (newDocs: ProjectDocument[]) => {
     setDocuments(prev => [...newDocs, ...prev]);
+  };
+
+  const handleDeleteDocument = async (docToDelete: ProjectDocument) => {
+    const confirmMsg = isEn 
+      ? `Are you sure you want to remove "${docToDelete.name}" from the project memory?`
+      : `Êtes-vous sûr de vouloir supprimer "${docToDelete.name}" de la mémoire du projet ?`;
+    if (!window.confirm(confirmMsg)) return;
+
+    const updatedDocs = documents.filter(d => d.id !== docToDelete.id && d.name !== docToDelete.name);
+    setDocuments(updatedDocs);
+    if (selectedDocument?.id === docToDelete.id) {
+      setSelectedDocument(null);
+    }
+
+    try {
+      const res = await fetch('/api/delete-document', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ id: docToDelete.id, name: docToDelete.name })
+      });
+      const data = await res.json();
+      if (data.project) {
+        setAnalysis(normalizeAnalysis(data.project));
+      } else {
+        const updatedSynthesis = synthesizeDatasetLocally(updatedDocs, analysis.projectName);
+        setAnalysis(normalizeAnalysis(updatedSynthesis, analysis.projectName));
+      }
+    } catch (err) {
+      console.warn('Erreur suppression document:', err);
+      const updatedSynthesis = synthesizeDatasetLocally(updatedDocs, analysis.projectName);
+      setAnalysis(normalizeAnalysis(updatedSynthesis, analysis.projectName));
+    }
   };
 
   const handleDatasetLoaded = (newDocs: ProjectDocument[], newAnalysis: ProjectAnalysis) => {
@@ -204,15 +237,6 @@ export default function App() {
                 />
               )}
 
-              {activeTab === 'finances' && (
-                <FinancesPanel
-                  analysis={analysis}
-                  documents={documents}
-                  onSelectDocument={setSelectedDocument}
-                  onNavigateTab={(tab: string) => setActiveTab(tab as any)}
-                />
-              )}
-
               {activeTab === 'timeline' && (
                 <TimelineView
                   analysis={analysis}
@@ -228,6 +252,15 @@ export default function App() {
                 />
               )}
 
+              {activeTab === 'graph' && (
+                <ProjectBrainGraph
+                  analysis={analysis}
+                  documents={documents}
+                  onSelectDocument={setSelectedDocument}
+                  onDeleteDocument={handleDeleteDocument}
+                />
+              )}
+
               {activeTab === 'more' && (
                 <MorePage
                   analysis={analysis}
@@ -236,6 +269,7 @@ export default function App() {
                   onRefreshAnalysis={handleRefreshAnalysis}
                   isAnalyzing={isAnalyzing}
                   onDocumentsAdded={handleDocumentsAdded}
+                  onDeleteDocument={handleDeleteDocument}
                 />
               )}
             </div>

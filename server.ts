@@ -7,6 +7,7 @@ import { INITIAL_NOVA_ANALYSIS, SAMPLE_DOCUMENTS_NOVA, SAMPLE_DOCUMENTS_ORION } 
 import { ProjectAnalysis, ProjectDocument } from './src/types/project.js';
 import { synthesizeDatasetLocally } from './src/utils/datasetSynthesizer.js';
 import { normalizeAnalysis } from './src/utils/normalizeAnalysis.js';
+import { calculateProjectFinances } from './src/utils/financialCalculator.js';
 import { processFileIntoDocument, parseEmlContent } from './src/utils/folderParser.js';
 
 // Safe dynamic imports for optional/new dependencies to prevent startup crashes before npm install
@@ -36,8 +37,9 @@ const PORT = Number(process.env.PORT) || 3000;
 app.use(express.json({ limit: '50mb' }));
 
 // LLM Mode: 'gemini' | 'ollama' | 'local'
-const forceLocalLLM = process.env.USE_LOCAL_LLM === 'true' || process.env.LLM_PROVIDER === 'ollama' || process.env.LLM_PROVIDER === 'local';
-const rawApiKey = process.env.GEMINI_API_KEY || '';
+const rawApiKey = (process.env.GEMINI_API_KEY || '').trim();
+// If GEMINI_API_KEY is provided, Gemini is used automatically. Set USE_LOCAL_LLM="true" without a key to use Ollama.
+const forceLocalLLM = process.env.USE_LOCAL_LLM === 'true' && !rawApiKey;
 const apiKey = forceLocalLLM ? '' : rawApiKey;
 
 const ai = new GoogleGenAI({
@@ -231,6 +233,36 @@ app.post('/api/reset-project', (req: Request, res: Response) => {
     success: true,
     project: currentAnalysis,
     documents: currentDocuments,
+  });
+});
+
+// 3.1. POST /api/delete-document - Remove a specific file from memory and recalculate project data
+app.post('/api/delete-document', (req: Request, res: Response) => {
+  const { id, name } = req.body;
+  if (!id && !name) {
+    return res.status(400).json({ error: 'ID ou nom du document requis pour la suppression.' });
+  }
+
+  const prevCount = currentDocuments.length;
+  currentDocuments = currentDocuments.filter(d => (id ? d.id !== id : true) && (name ? d.name !== name : true));
+
+  if (currentDocuments.length > 0) {
+    const updatedSynthesis = synthesizeDatasetLocally(currentDocuments, currentAnalysis.projectName);
+    const updatedFinances = calculateProjectFinances(currentDocuments, currentAnalysis.financials);
+    currentAnalysis = normalizeAnalysis({
+      ...currentAnalysis,
+      ...updatedSynthesis,
+      financials: updatedFinances
+    }, currentAnalysis.projectName);
+  } else {
+    currentAnalysis = createEmptyAnalysis();
+  }
+
+  res.json({
+    success: true,
+    removed: prevCount - currentDocuments.length,
+    documents: currentDocuments,
+    project: currentAnalysis,
   });
 });
 
@@ -1481,6 +1513,13 @@ async function startServer() {
 
   app.listen(PORT, '0.0.0.0', () => {
     console.log(`[Project 360 Server] Running on http://localhost:${PORT}`);
+    if (apiKey) {
+      console.log(`[Project 360 AI] Google Gemini Active (${GEMINI_MODEL}) - Multimodal Vision OCR & RAG enabled`);
+    } else if (process.env.USE_LOCAL_LLM === 'true') {
+      console.log(`[Project 360 AI] Local LLM Active (${OLLAMA_HOST} - ${OLLAMA_MODEL})`);
+    } else {
+      console.log(`[Project 360 AI] Local Engine Active (Add GEMINI_API_KEY in .env to enable Gemini Flash)`);
+    }
   });
 }
 

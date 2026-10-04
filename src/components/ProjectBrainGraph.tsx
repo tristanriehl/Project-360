@@ -1,11 +1,12 @@
 import React, { useState } from 'react';
-import { Brain, FileText, Scale, ShieldAlert, CheckCircle2, Search, Filter, ZoomIn, ZoomOut, Maximize2, ExternalLink, Sparkles } from 'lucide-react';
+import { Brain, FileText, Scale, ShieldAlert, CheckCircle2, Search, Filter, ZoomIn, ZoomOut, Maximize2, ExternalLink, Sparkles, Trash2, X } from 'lucide-react';
 import { ProjectAnalysis, ProjectDocument } from '../types/project';
 
 interface ProjectBrainGraphProps {
   analysis: ProjectAnalysis;
   documents: ProjectDocument[];
   onSelectDocument: (doc: ProjectDocument) => void;
+  onDeleteDocument?: (doc: ProjectDocument) => void;
 }
 
 interface GraphNode {
@@ -28,12 +29,15 @@ interface GraphLink {
 export const ProjectBrainGraph: React.FC<ProjectBrainGraphProps> = ({
   analysis,
   documents,
-  onSelectDocument
+  onSelectDocument,
+  onDeleteDocument
 }) => {
   const [selectedNode, setSelectedNode] = useState<GraphNode | null>(null);
   const [filterType, setFilterType] = useState<string>('all');
   const [searchQuery, setSearchQuery] = useState('');
   const [zoomLevel, setZoomLevel] = useState(1);
+  const [isFilesModalOpen, setIsFilesModalOpen] = useState(false);
+  const [modalSearchQuery, setModalSearchQuery] = useState('');
 
   // Generate nodes for visualization
   const width = 800;
@@ -229,6 +233,17 @@ export const ProjectBrainGraph: React.FC<ProjectBrainGraphProps> = ({
               <ZoomIn className="w-3.5 h-3.5" />
             </button>
           </div>
+
+          {onDeleteDocument && (
+            <button
+              onClick={() => setIsFilesModalOpen(true)}
+              className="flex items-center gap-1.5 px-3 py-1.5 text-xs bg-rose-50 dark:bg-rose-950/40 hover:bg-rose-100 dark:hover:bg-rose-900/40 text-rose-700 dark:text-rose-300 border border-rose-200 dark:border-rose-800 rounded-xl font-semibold transition-colors cursor-pointer"
+              title="Gérer et supprimer des fichiers du graphe"
+            >
+              <Trash2 className="w-3.5 h-3.5 text-rose-500" />
+              <span>Gérer / Supprimer fichiers ({documents.length})</span>
+            </button>
+          )}
         </div>
       </div>
 
@@ -392,11 +407,25 @@ export const ProjectBrainGraph: React.FC<ProjectBrainGraphProps> = ({
 
                     <button
                       onClick={() => onSelectDocument(selectedNode.details)}
-                      className="w-full py-2 px-3 rounded-xl bg-blue-600 hover:bg-blue-700 text-white font-semibold text-xs flex items-center justify-center gap-2 shadow-sm transition-colors"
+                      className="w-full py-2 px-3 rounded-xl bg-blue-600 hover:bg-blue-700 text-white font-semibold text-xs flex items-center justify-center gap-2 shadow-sm transition-colors cursor-pointer"
                     >
                       <FileText className="w-3.5 h-3.5" />
                       <span>Ouvrir le document complet</span>
                     </button>
+
+                    {onDeleteDocument && (
+                      <button
+                        onClick={() => {
+                          onDeleteDocument(selectedNode.details);
+                          setSelectedNode(null);
+                        }}
+                        className="w-full py-2 px-3 rounded-xl bg-rose-50 dark:bg-rose-950/40 hover:bg-rose-100 dark:hover:bg-rose-900/60 text-rose-700 dark:text-rose-300 border border-rose-200 dark:border-rose-900 font-semibold text-xs flex items-center justify-center gap-2 transition-colors cursor-pointer"
+                        title="Supprimer ce fichier du graphe et recalculer le projet"
+                      >
+                        <Trash2 className="w-3.5 h-3.5 text-rose-600" />
+                        <span>Supprimer ce fichier du graphe</span>
+                      </button>
+                    )}
                   </div>
                 )}
 
@@ -445,6 +474,117 @@ export const ProjectBrainGraph: React.FC<ProjectBrainGraphProps> = ({
         </div>
 
       </div>
+
+      {/* Files Deletion & Management Modal for Graph */}
+      {isFilesModalOpen && (
+        <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-xs flex items-center justify-center p-4 animate-fadeIn">
+          <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl w-full max-w-2xl max-h-[85vh] flex flex-col shadow-2xl overflow-hidden">
+            {/* Modal Header */}
+            <div className="flex items-center justify-between p-4 border-b border-slate-200 dark:border-slate-800">
+              <div className="flex items-center gap-2">
+                <div className="p-2 rounded-xl bg-rose-50 dark:bg-rose-950/60 text-rose-600 dark:text-rose-400">
+                  <Trash2 className="w-4 h-4" />
+                </div>
+                <div>
+                  <h3 className="text-sm font-bold text-slate-900 dark:text-white">
+                    Gérer &amp; Supprimer des Fichiers du Graphe ({documents.length})
+                  </h3>
+                  <p className="text-[11px] text-slate-500">
+                    Supprimez des fichiers pour retirer leurs nœuds du graphe et recalculer instantanément le projet.
+                  </p>
+                </div>
+              </div>
+              <button
+                onClick={() => setIsFilesModalOpen(false)}
+                className="p-1.5 rounded-lg text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors cursor-pointer"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            {/* Modal Search */}
+            <div className="p-3 border-b border-slate-100 dark:border-slate-800 bg-slate-50 dark:bg-slate-900/50">
+              <div className="relative">
+                <Search className="w-3.5 h-3.5 text-slate-400 absolute left-3 top-2.5" />
+                <input
+                  type="text"
+                  value={modalSearchQuery}
+                  onChange={(e) => setModalSearchQuery(e.target.value)}
+                  placeholder="Filtrer les fichiers à supprimer..."
+                  className="w-full pl-9 pr-3 py-1.5 text-xs bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-slate-800 dark:text-slate-200 focus:outline-none focus:ring-2 focus:ring-rose-500"
+                />
+              </div>
+            </div>
+
+            {/* Modal Files List */}
+            <div className="flex-1 overflow-y-auto p-4 space-y-2">
+              {documents
+                .filter(d => !modalSearchQuery.trim() || d.name.toLowerCase().includes(modalSearchQuery.toLowerCase()) || d.categoryLabel.toLowerCase().includes(modalSearchQuery.toLowerCase()))
+                .map((doc) => (
+                  <div
+                    key={doc.id}
+                    className="p-3 rounded-xl bg-slate-50 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700 flex items-center justify-between gap-3 hover:border-slate-300 dark:hover:border-slate-600 transition-colors"
+                  >
+                    <div className="min-w-0 flex-1">
+                      <div className="flex items-center gap-2">
+                        <span className="px-1.5 py-0.5 rounded text-[9px] font-bold uppercase bg-blue-100 text-blue-800 dark:bg-blue-950 dark:text-blue-300">
+                          {doc.categoryLabel}
+                        </span>
+                        <h4 className="text-xs font-bold text-slate-900 dark:text-white truncate">
+                          {doc.name}
+                        </h4>
+                      </div>
+                      <p className="text-[10px] text-slate-500 truncate mt-0.5">
+                        {doc.date} • {doc.author || 'Inconnu'} • {doc.summary}
+                      </p>
+                    </div>
+
+                    <div className="flex items-center gap-1 shrink-0">
+                      <button
+                        onClick={() => {
+                          onSelectDocument(doc);
+                          setIsFilesModalOpen(false);
+                        }}
+                        className="px-2.5 py-1 text-[11px] font-medium text-blue-600 dark:text-blue-400 hover:bg-blue-50 dark:hover:bg-blue-950/40 rounded-lg transition-colors cursor-pointer"
+                      >
+                        Voir
+                      </button>
+
+                      {onDeleteDocument && (
+                        <button
+                          onClick={() => {
+                            if (selectedNode?.details?.id === doc.id) {
+                              setSelectedNode(null);
+                            }
+                            onDeleteDocument(doc);
+                          }}
+                          className="flex items-center gap-1 px-2.5 py-1 text-[11px] font-bold text-rose-600 hover:text-white hover:bg-rose-600 rounded-lg border border-rose-200 dark:border-rose-900 transition-colors cursor-pointer"
+                          title="Supprimer ce fichier du graphe"
+                        >
+                          <Trash2 className="w-3 h-3" />
+                          <span>Supprimer</span>
+                        </button>
+                      )}
+                    </div>
+                  </div>
+                ))}
+            </div>
+
+            {/* Modal Footer */}
+            <div className="p-3 border-t border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-900/60 flex items-center justify-between">
+              <span className="text-[11px] text-slate-500">
+                {documents.length} document(s) modélisé(s) dans le graphe
+              </span>
+              <button
+                onClick={() => setIsFilesModalOpen(false)}
+                className="px-4 py-1.5 text-xs font-semibold bg-slate-200 dark:bg-slate-700 hover:bg-slate-300 dark:hover:bg-slate-600 rounded-xl transition-colors cursor-pointer text-slate-800 dark:text-slate-200"
+              >
+                Fermer
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

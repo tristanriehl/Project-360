@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { 
   CheckCircle2, 
   AlertTriangle, 
@@ -11,7 +11,11 @@ import {
   Calendar, 
   DollarSign, 
   Check, 
-  ExternalLink
+  ExternalLink,
+  Calculator,
+  ChevronDown,
+  ChevronUp,
+  FileSpreadsheet
 } from 'lucide-react';
 import { ProjectAnalysis, ProjectDocument } from '../types/project';
 import { TabType } from './Sidebar';
@@ -29,6 +33,7 @@ export const DashboardOverview: React.FC<DashboardOverviewProps> = ({
   onSelectDocument,
   onNavigateTab
 }) => {
+  const [isFinDetailsOpen, setIsFinDetailsOpen] = useState(false);
   const contradictions = analysis?.contradictions || [];
   const decisions = analysis?.decisions || [];
   const milestones = analysis?.milestones || [];
@@ -51,7 +56,6 @@ export const DashboardOverview: React.FC<DashboardOverviewProps> = ({
     if (val === undefined || val === null) return 'Non renseigné';
     const str = String(val).trim();
     if (!str || str === '0' || str === '0 $') return '0 $';
-    if (str === 'Non renseigné') return 'Non renseigné';
     if (str.includes('$') || str.includes('CAD') || str.includes('EUR') || str.includes('USD')) return str;
     return `${str} $ CAD`;
   };
@@ -406,44 +410,156 @@ export const DashboardOverview: React.FC<DashboardOverviewProps> = ({
         <div className="space-y-6">
           
           {/* Financials card */}
-          <div 
-            onClick={() => onNavigateTab('finances')}
-            className="p-5 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-sm hover:shadow-md hover:border-emerald-400 transition-all cursor-pointer group"
-          >
-            <div className="flex items-center justify-between mb-3">
+          <div className="p-5 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-sm space-y-4">
+            <div className="flex items-center justify-between">
               <div className="flex items-center gap-2">
-                <DollarSign className="w-4 h-4 text-emerald-600" />
-                <h3 className="text-sm font-bold text-slate-900 dark:text-white group-hover:text-emerald-600 transition-colors">
-                  Suivi Financier &amp; Factures
-                </h3>
+                <div className="p-1.5 rounded-lg bg-emerald-50 dark:bg-emerald-950/60 text-emerald-600 dark:text-emerald-400">
+                  <DollarSign className="w-4 h-4" />
+                </div>
+                <div>
+                  <h3 className="text-sm font-bold text-slate-900 dark:text-white">
+                    Suivi Financier &amp; Factures
+                  </h3>
+                  <div className="flex items-center gap-1.5 mt-0.5">
+                    <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
+                    <span className="text-[10px] text-emerald-700 dark:text-emerald-400 font-semibold">
+                      Calculé en direct des pièces
+                    </span>
+                  </div>
+                </div>
               </div>
-              <span className="text-[10px] font-bold px-2 py-0.5 rounded bg-emerald-100 dark:bg-emerald-950 text-emerald-800 dark:text-emerald-300 flex items-center gap-1">
-                Ouvrir le panneau <ArrowRight className="w-2.5 h-2.5" />
+              <span className="text-[10px] font-bold px-2 py-0.5 rounded bg-blue-100 dark:bg-blue-950 text-blue-700 dark:text-blue-300">
+                Calcul consolidé
               </span>
             </div>
 
-            <div className="space-y-2.5 text-xs">
-              <div className="flex justify-between py-1 border-b border-slate-100 dark:border-slate-800">
-                <span className="text-slate-500">Budget / Contrat :</span>
+            {/* Calculations KPIs */}
+            <div className="space-y-3 text-xs">
+              {/* Budget Total */}
+              <div className="flex justify-between items-center py-1 border-b border-slate-100 dark:border-slate-800">
+                <span className="text-slate-500">Budget / Contrat approuvé :</span>
                 <span className="font-bold text-slate-900 dark:text-white">{formatAmount(financials.contractTotal)}</span>
               </div>
-              <div className="flex justify-between py-1 border-b border-slate-100 dark:border-slate-800">
-                <span className="text-slate-500">Facturé à ce jour :</span>
-                <span className="font-bold text-slate-900 dark:text-white">{formatAmount(financials.invoicedTotal)}</span>
+
+              {/* Facturé + Progress Bar */}
+              <div className="py-1 border-b border-slate-100 dark:border-slate-800 space-y-1.5">
+                <div className="flex justify-between items-center">
+                  <span className="text-slate-500">Facturé à ce jour :</span>
+                  <div className="text-right">
+                    <span className="font-bold text-slate-900 dark:text-white">{formatAmount(financials.invoicedTotal)}</span>
+                    {financials.percentInvoiced !== undefined && (
+                      <span className="ml-2 text-[10px] font-bold text-blue-600 dark:text-blue-400 bg-blue-50 dark:bg-blue-950/60 px-1.5 py-0.5 rounded">
+                        {financials.percentInvoiced}% du budget
+                      </span>
+                    )}
+                  </div>
+                </div>
+                {financials.percentInvoiced !== undefined && (
+                  <div className="w-full h-1.5 bg-slate-100 dark:bg-slate-800 rounded-full overflow-hidden">
+                    <div 
+                      className="h-full bg-blue-600 rounded-full transition-all duration-500" 
+                      style={{ width: `${Math.min(100, financials.percentInvoiced)}%` }} 
+                    />
+                  </div>
+                )}
               </div>
-              <div className="flex justify-between py-1 border-b border-slate-100 dark:border-slate-800">
-                <span className="text-slate-500">Payé / Acquitté :</span>
-                <span className="font-bold text-emerald-600 dark:text-emerald-400">{formatAmount(financials.paidTotal)}</span>
+
+              {/* Payé / Acquitté + Progress Bar */}
+              <div className="py-1 border-b border-slate-100 dark:border-slate-800 space-y-1.5">
+                <div className="flex justify-between items-center">
+                  <span className="text-slate-500">Payé / Acquitté :</span>
+                  <div className="text-right">
+                    <span className="font-bold text-emerald-600 dark:text-emerald-400">{formatAmount(financials.paidTotal)}</span>
+                    {financials.percentPaid !== undefined && (
+                      <span className="ml-2 text-[10px] font-bold text-emerald-700 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-950/60 px-1.5 py-0.5 rounded">
+                        {financials.percentPaid}% facturé
+                      </span>
+                    )}
+                  </div>
+                </div>
+                {financials.percentPaid !== undefined && (
+                  <div className="w-full h-1.5 bg-slate-100 dark:bg-slate-800 rounded-full overflow-hidden">
+                    <div 
+                      className="h-full bg-emerald-500 rounded-full transition-all duration-500" 
+                      style={{ width: `${Math.min(100, financials.percentPaid)}%` }} 
+                    />
+                  </div>
+                )}
               </div>
-              <div className="flex justify-between py-1 text-rose-600 dark:text-rose-400 bg-rose-50 dark:bg-rose-950/40 p-2 rounded-lg border border-rose-200 dark:border-rose-900/50">
+
+              {/* Solde budgétaire restant calculé */}
+              <div className="flex justify-between items-center py-1.5 px-2 rounded-lg bg-slate-50 dark:bg-slate-800/80 border border-slate-200/60 dark:border-slate-700/60">
+                <span className="text-slate-600 dark:text-slate-300 font-medium">Solde budgétaire restant :</span>
+                <span className="font-black text-slate-900 dark:text-white">
+                  {financials.numericRemaining !== undefined 
+                    ? `${new Intl.NumberFormat('fr-CA', { maximumFractionDigits: 0 }).format(financials.numericRemaining)} $ CAD`
+                    : 'Calculé selon factures'}
+                </span>
+              </div>
+
+              {/* Montant contesté / litige */}
+              <div className="flex justify-between items-center py-1.5 text-rose-600 dark:text-rose-400 bg-rose-50 dark:bg-rose-950/40 p-2 rounded-lg border border-rose-200 dark:border-rose-900/50">
                 <span className="font-semibold">Montant contesté / litige :</span>
-                <span className="font-black">{String(financials.disputedAmount || '0 $')}</span>
+                <span className="font-black">{String(financials.disputedAmount || '0 $ CAD')}</span>
               </div>
             </div>
 
-            <p className="text-[11px] text-slate-500 dark:text-slate-400 mt-3 leading-relaxed">
+            {/* Notes */}
+            <p className="text-[11px] text-slate-500 dark:text-slate-400 leading-relaxed pt-1">
               {financials.notes || 'Suivi budgétaire consolidé.'}
             </p>
+
+            {/* Toggle Detailed Breakdown Table */}
+            {financials.items && financials.items.length > 0 && (
+              <div className="pt-2 border-t border-slate-100 dark:border-slate-800">
+                <button
+                  onClick={() => setIsFinDetailsOpen(!isFinDetailsOpen)}
+                  className="w-full flex items-center justify-between text-[11px] font-bold text-slate-600 dark:text-slate-400 hover:text-blue-600 dark:hover:text-blue-400 transition-colors cursor-pointer py-1"
+                >
+                  <span className="flex items-center gap-1.5">
+                    <Calculator className="w-3.5 h-3.5 text-blue-500" />
+                    Détail des calculs ({financials.items.length} lignes)
+                  </span>
+                  {isFinDetailsOpen ? <ChevronUp className="w-3.5 h-3.5" /> : <ChevronDown className="w-3.5 h-3.5" />}
+                </button>
+
+                {isFinDetailsOpen && (
+                  <div className="mt-2 space-y-1.5 max-h-48 overflow-y-auto pr-1">
+                    {financials.items.map((item) => (
+                      <div 
+                        key={item.id}
+                        className={`p-2 rounded-lg text-[10px] flex items-center justify-between border ${
+                          item.status === 'disputed' 
+                            ? 'bg-rose-50/80 dark:bg-rose-950/30 border-rose-200 dark:border-rose-900/60' 
+                            : item.status === 'paid'
+                            ? 'bg-emerald-50/60 dark:bg-emerald-950/30 border-emerald-200 dark:border-emerald-900/60'
+                            : 'bg-slate-50 dark:bg-slate-800/60 border-slate-200/60 dark:border-slate-700/60'
+                        }`}
+                      >
+                        <div className="min-w-0 flex-1 pr-2">
+                          <div className="font-bold text-slate-800 dark:text-slate-200 truncate">
+                            {item.label}
+                          </div>
+                          <div className="text-slate-400 text-[9px] truncate">
+                            {item.sourceDocName || 'Document'} {item.date ? `• ${item.date}` : ''}
+                          </div>
+                        </div>
+                        <div className="text-right shrink-0">
+                          <div className={`font-black ${item.status === 'disputed' ? 'text-rose-600' : item.status === 'paid' ? 'text-emerald-600' : 'text-slate-800 dark:text-slate-200'}`}>
+                            {item.formattedAmount}
+                          </div>
+                          <span className={`px-1 rounded text-[8px] font-bold uppercase ${
+                            item.status === 'disputed' ? 'bg-rose-200 text-rose-800' : item.status === 'paid' ? 'bg-emerald-200 text-emerald-800' : 'bg-slate-200 text-slate-700'
+                          }`}>
+                            {item.status === 'disputed' ? 'Contesté' : item.status === 'paid' ? 'Payé' : 'Validé'}
+                          </span>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            )}
           </div>
 
           {/* Équipe & Parties Prenantes */}

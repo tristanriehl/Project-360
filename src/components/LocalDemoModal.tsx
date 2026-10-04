@@ -186,16 +186,7 @@ export const LocalDemoModal: React.FC<LocalDemoModalProps> = ({ isOpen, onClose 
         </div>
 
         {/* Footer */}
-        <div className="p-4 border-t border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-900 flex flex-wrap items-center justify-between gap-3">
-          <a
-            href="https://github.com/tristanriehl/Project-360"
-            target="_blank"
-            rel="noopener noreferrer"
-            className="flex items-center gap-2 text-xs font-semibold text-slate-700 dark:text-slate-300 hover:text-blue-600 dark:hover:text-blue-400 transition-colors"
-          >
-            <ExternalLink className="w-3.5 h-3.5 text-blue-500" />
-            <span>https://github.com/tristanriehl/Project-360</span>
-          </a>
+        <div className="p-4 border-t border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-900 flex items-center justify-end gap-3">
           <div className="flex items-center gap-2">
             <button
               onClick={onClose}

@@ -18,6 +18,7 @@ import {
   Archive,
   RefreshCw,
   Loader2,
+  Trash2,
   Image as ImageIcon
 } from 'lucide-react';
 import { ProjectAnalysis, ProjectDocument } from '../types/project';
@@ -29,6 +30,7 @@ interface DocumentManagerProps {
   onRefreshAnalysis: () => void;
   isAnalyzing: boolean;
   onDocumentsAdded: (newDocs: ProjectDocument[]) => void;
+  onDeleteDocument?: (doc: ProjectDocument) => void;
 }
 
 export const DocumentManager: React.FC<DocumentManagerProps> = ({
@@ -36,7 +38,8 @@ export const DocumentManager: React.FC<DocumentManagerProps> = ({
   onSelectDocument,
   onRefreshAnalysis,
   isAnalyzing,
-  onDocumentsAdded
+  onDocumentsAdded,
+  onDeleteDocument
 }) => {
   const [selectedCategory, setSelectedCategory] = useState<string>('all');
   const [searchQuery, setSearchQuery] = useState('');
@@ -299,9 +302,23 @@ export const DocumentManager: React.FC<DocumentManagerProps> = ({
 
               <div className="pt-2 border-t border-slate-100 dark:border-slate-800 flex items-center justify-between text-[10px] text-slate-400">
                 <span>{doc.date}</span>
-                <span className="flex items-center gap-1 text-blue-600 dark:text-blue-400 font-semibold group-hover:underline">
-                  Ouvrir <ExternalLink className="w-3 h-3" />
-                </span>
+                <div className="flex items-center gap-2">
+                  {onDeleteDocument && (
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        onDeleteDocument(doc);
+                      }}
+                      className="p-1 rounded-lg text-slate-400 hover:text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-950/40 transition-colors"
+                      title="Supprimer ce fichier de la mémoire"
+                    >
+                      <Trash2 className="w-3.5 h-3.5" />
+                    </button>
+                  )}
+                  <span className="flex items-center gap-1 text-blue-600 dark:text-blue-400 font-semibold group-hover:underline">
+                    Ouvrir <ExternalLink className="w-3 h-3" />
+                  </span>
+                </div>
               </div>
             </div>
           );

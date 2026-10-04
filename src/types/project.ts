@@ -77,12 +77,31 @@ export interface Stakeholder {
   influence: string;
 }
 
+export interface FinancialItem {
+  id: string;
+  label: string;
+  amount: number;
+  formattedAmount: string;
+  type: 'contract' | 'invoice' | 'payment' | 'dispute' | 'adjustment';
+  status: 'paid' | 'pending' | 'disputed' | 'approved';
+  sourceDocName?: string;
+  date?: string;
+}
+
 export interface FinancialMetric {
   contractTotal: string;
   invoicedTotal: string;
   paidTotal: string;
   disputedAmount?: string;
   notes: string;
+  numericContract?: number;
+  numericInvoiced?: number;
+  numericPaid?: number;
+  numericDisputed?: number;
+  numericRemaining?: number;
+  percentInvoiced?: number;
+  percentPaid?: number;
+  items?: FinancialItem[];
 }
 
 export interface ProjectAnalysis {

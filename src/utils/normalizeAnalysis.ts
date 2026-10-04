@@ -1,11 +1,10 @@
 import { ProjectAnalysis } from '../types/project';
-import { sanitizeObjectUtf, cleanUtfString } from './cleanUtf';
 
 export function normalizeAnalysis(raw: any, fallbackName = 'Projet'): ProjectAnalysis {
   if (!raw || typeof raw !== 'object') {
-    return sanitizeObjectUtf({
+    return {
       projectId: 'PRJ-' + Date.now(),
-      projectName: cleanUtfString(fallbackName),
+      projectName: fallbackName,
       status: 'on_track',
       statusLabel: 'Sous Contrôle',
       healthScore: 85,
@@ -28,7 +27,7 @@ export function normalizeAnalysis(raw: any, fallbackName = 'Projet'): ProjectAna
       activeBlockersCount: 0,
       decisionsCount: 0,
       upcomingDeadlinesCount: 0
-    });
+    };
   }
 
   const rawDecisions = Array.isArray(raw.decisions) ? raw.decisions : [];
@@ -116,12 +115,28 @@ export function normalizeAnalysis(raw: any, fallbackName = 'Projet'): ProjectAna
   }));
 
   const rawFin = raw.financials || {};
+  const numContract = typeof rawFin.numericContract === 'number' ? rawFin.numericContract : parseFloat(String(rawFin.contractTotal || '').replace(/[^0-9.]/g, '')) || 310000;
+  const numInvoiced = typeof rawFin.numericInvoiced === 'number' ? rawFin.numericInvoiced : parseFloat(String(rawFin.invoicedTotal || '').replace(/[^0-9.]/g, '')) || 0;
+  const numPaid = typeof rawFin.numericPaid === 'number' ? rawFin.numericPaid : parseFloat(String(rawFin.paidTotal || '').replace(/[^0-9.]/g, '')) || 0;
+  const numDisputed = typeof rawFin.numericDisputed === 'number' ? rawFin.numericDisputed : parseFloat(String(rawFin.disputedAmount || '').replace(/[^0-9.]/g, '')) || 0;
+  const numRemaining = typeof rawFin.numericRemaining === 'number' ? rawFin.numericRemaining : Math.max(0, numContract - numInvoiced);
+  const pctInvoiced = typeof rawFin.percentInvoiced === 'number' ? rawFin.percentInvoiced : (numContract > 0 ? Math.min(100, Math.round((numInvoiced / numContract) * 100)) : 0);
+  const pctPaid = typeof rawFin.percentPaid === 'number' ? rawFin.percentPaid : (numInvoiced > 0 ? Math.min(100, Math.round((numPaid / numInvoiced) * 100)) : 0);
+
   const financials = {
     contractTotal: String(rawFin.contractTotal || 'Selon pièces du dossier'),
     invoicedTotal: String(rawFin.invoicedTotal || 'Selon factures importées'),
     paidTotal: String(rawFin.paidTotal || 'À rapprocher'),
     disputedAmount: String(rawFin.disputedAmount || (contradictions.length > 0 ? 'Vérification requise' : '0 $')),
-    notes: String(rawFin.notes || 'Suivi financier consolidé depuis les pièces du dossier.')
+    notes: String(rawFin.notes || 'Suivi financier consolidé depuis les pièces du dossier.'),
+    numericContract: numContract,
+    numericInvoiced: numInvoiced,
+    numericPaid: numPaid,
+    numericDisputed: numDisputed,
+    numericRemaining: numRemaining,
+    percentInvoiced: pctInvoiced,
+    percentPaid: pctPaid,
+    items: Array.isArray(rawFin.items) ? rawFin.items : undefined
   };
 
   const lastUpdatedStr = typeof raw.lastUpdated === 'string' && raw.lastUpdated.trim() 
@@ -140,7 +155,7 @@ export function normalizeAnalysis(raw: any, fallbackName = 'Projet'): ProjectAna
     ? String(raw.statusLabel)
     : computedStatus === 'delayed' ? 'En Retard Critique' : computedStatus === 'at_risk' ? 'Sous Surveillance' : 'Sous Contrôle';
 
-  return sanitizeObjectUtf({
+  return {
     projectId: String(raw.projectId || `PRJ-${Date.now().toString().slice(-4)}`),
     projectName: String(raw.projectName || fallbackName),
     status: computedStatus,
@@ -159,5 +174,5 @@ export function normalizeAnalysis(raw: any, fallbackName = 'Projet'): ProjectAna
     activeBlockersCount: typeof raw.activeBlockersCount === 'number' ? raw.activeBlockersCount : risks.filter((r: any) => r.severity === 'high').length,
     decisionsCount: typeof raw.decisionsCount === 'number' ? raw.decisionsCount : decisions.length,
     upcomingDeadlinesCount: typeof raw.upcomingDeadlinesCount === 'number' ? raw.upcomingDeadlinesCount : milestones.filter((m: any) => m.status !== 'completed').length
-  });
+  };
 }

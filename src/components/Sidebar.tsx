@@ -7,7 +7,6 @@ import {
   AlertCircle, 
   Clock, 
   FileSpreadsheet, 
-  DollarSign,
   ChevronLeft, 
   ChevronRight, 
   RefreshCw, 
@@ -15,7 +14,7 @@ import {
   Laptop, 
   Workflow,
   Layers,
-  Github
+  Network
 } from 'lucide-react';
 import { ProjectAnalysis } from '../types/project';
 import { ThemeToggle } from '../context/ThemeContext';
@@ -29,7 +28,7 @@ export type TabType =
   | 'contradictions' 
   | 'timeline' 
   | 'briefing'
-  | 'finances'
+  | 'graph'
   | 'more';
 
 interface SidebarProps {
@@ -52,7 +51,8 @@ export const Sidebar: React.FC<SidebarProps> = ({
   onOpenLocalGuide
 }) => {
   const [isCollapsed, setIsCollapsed] = useState(false);
-  const { t } = useLanguage();
+  const { t, language } = useLanguage();
+  const isEn = language === 'en';
 
   const navItems: { id: TabType; label: string; icon: React.ReactNode; badge?: number | string; highlight?: boolean }[] = [
     { id: 'overview', label: t('nav_overview'), icon: <LayoutDashboard className="w-4 h-4 shrink-0" /> },
@@ -60,9 +60,9 @@ export const Sidebar: React.FC<SidebarProps> = ({
     { id: 'new_event', label: t('nav_new_event'), icon: <Sparkles className="w-4 h-4 text-amber-500 shrink-0" />, highlight: true },
     { id: 'decisions', label: t('nav_decisions'), icon: <Scale className="w-4 h-4 text-emerald-500 shrink-0" />, badge: analysis?.decisions?.length ?? 0 },
     { id: 'contradictions', label: t('nav_contradictions'), icon: <AlertCircle className="w-4 h-4 text-rose-500 shrink-0" />, badge: analysis?.contradictions?.length ?? 0 },
-    { id: 'finances', label: t('nav_finances'), icon: <DollarSign className="w-4 h-4 text-emerald-500 shrink-0" /> },
     { id: 'timeline', label: t('nav_timeline'), icon: <Clock className="w-4 h-4 text-sky-500 shrink-0" /> },
     { id: 'briefing', label: t('nav_briefing'), icon: <FileSpreadsheet className="w-4 h-4 text-teal-500 shrink-0" /> },
+    { id: 'graph', label: isEn ? 'Project Graph' : 'Graphe Neuronal', icon: <Network className="w-4 h-4 text-violet-500 shrink-0" /> },
     { id: 'more', label: t('nav_more'), icon: <Layers className="w-4 h-4 text-indigo-500 shrink-0" /> },
   ];
 
@@ -133,20 +133,6 @@ export const Sidebar: React.FC<SidebarProps> = ({
 
       {/* Bottom Actions */}
       <div className="p-2 border-t border-slate-200 dark:border-slate-800 space-y-1">
-        {/* GitHub Repository */}
-        <a
-          href="https://github.com/tristanriehl/Project-360"
-          target="_blank"
-          rel="noopener noreferrer"
-          title={isCollapsed ? 'GitHub Repository' : undefined}
-          className={`w-full flex items-center gap-2.5 px-3 py-2 rounded-xl text-xs font-semibold text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 hover:text-blue-600 dark:hover:text-blue-400 transition-colors ${
-            isCollapsed ? 'justify-center px-2' : ''
-          }`}
-        >
-          <Github className="w-4 h-4 shrink-0" />
-          {!isCollapsed && <span className="truncate">GitHub Repo</span>}
-        </a>
-
         {/* Local Demo Guide */}
         <button
           onClick={onOpenLocalGuide}

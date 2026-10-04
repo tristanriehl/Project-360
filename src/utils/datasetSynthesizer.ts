@@ -1,4 +1,5 @@
 import { ProjectAnalysis, ProjectDocument, Decision, ContradictionItem, MilestoneItem, RiskItem, ActionItem, Stakeholder } from '../types/project';
+import { calculateProjectFinances } from './financialCalculator';
 
 /**
  * Builds a comprehensive ProjectAnalysis strictly from user-uploaded documents.
@@ -323,13 +324,13 @@ export function synthesizeDatasetLocally(documents: ProjectDocument[], folderNam
     risks,
     actions,
     contradictions,
-    financials: {
-      contractTotal: detectedContract || 'Selon pièces du dossier',
-      invoicedTotal: detectedInvoiced || 'Selon factures importées',
-      paidTotal: detectedPaid || 'À rapprocher',
-      disputedAmount: detectedDisputed || (contradictions.length > 0 ? 'Vérification requise' : '0 $'),
-      notes: financialNotes.length > 0 ? financialNotes.slice(0, 3).join(' | ') : `${documents.filter(d => d.category === 'contract_finance').length} pièce(s) financière(s) indexée(s).`
-    },
+    financials: calculateProjectFinances(documents, {
+      contractTotal: detectedContract || undefined,
+      invoicedTotal: detectedInvoiced || undefined,
+      paidTotal: detectedPaid || undefined,
+      disputedAmount: detectedDisputed || undefined,
+      notes: financialNotes.length > 0 ? financialNotes.slice(0, 3).join(' | ') : undefined
+    }),
     topics,
     activeBlockersCount: risks.filter(r => r.severity === 'high').length,
     decisionsCount: decisions.length,

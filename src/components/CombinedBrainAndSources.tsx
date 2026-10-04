@@ -11,6 +11,7 @@ interface CombinedBrainAndSourcesProps {
   onRefreshAnalysis: () => void;
   isAnalyzing: boolean;
   onDocumentsAdded: (newDocs: ProjectDocument[]) => void;
+  onDeleteDocument?: (doc: ProjectDocument) => void;
 }
 
 export const CombinedBrainAndSources: React.FC<CombinedBrainAndSourcesProps> = ({
@@ -19,7 +20,8 @@ export const CombinedBrainAndSources: React.FC<CombinedBrainAndSourcesProps> = (
   onSelectDocument,
   onRefreshAnalysis,
   isAnalyzing,
-  onDocumentsAdded
+  onDocumentsAdded,
+  onDeleteDocument
 }) => {
   const [viewMode, setViewMode] = useState<'graph' | 'documents'>('graph');
 
@@ -64,6 +66,7 @@ export const CombinedBrainAndSources: React.FC<CombinedBrainAndSourcesProps> = (
           analysis={analysis}
           documents={documents}
           onSelectDocument={onSelectDocument}
+          onDeleteDocument={onDeleteDocument}
         />
       ) : (
         <DocumentManager
@@ -72,6 +75,7 @@ export const CombinedBrainAndSources: React.FC<CombinedBrainAndSourcesProps> = (
           onRefreshAnalysis={onRefreshAnalysis}
           isAnalyzing={isAnalyzing}
           onDocumentsAdded={onDocumentsAdded}
+          onDeleteDocument={onDeleteDocument}
         />
       )}
     </div>

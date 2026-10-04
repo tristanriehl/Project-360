@@ -15,6 +15,7 @@ interface MorePageProps {
   onRefreshAnalysis: () => void;
   isAnalyzing: boolean;
   onDocumentsAdded: (newDocs: ProjectDocument[]) => void;
+  onDeleteDocument?: (doc: ProjectDocument) => void;
   initialSubTab?: MoreSubTabType;
 }
 
@@ -25,6 +26,7 @@ export const MorePage: React.FC<MorePageProps> = ({
   onRefreshAnalysis,
   isAnalyzing,
   onDocumentsAdded,
+  onDeleteDocument,
   initialSubTab = 'flowchart'
 }) => {
   const [activeSubTab, setActiveSubTab] = useState<MoreSubTabType>(initialSubTab);
@@ -101,6 +103,7 @@ export const MorePage: React.FC<MorePageProps> = ({
             onRefreshAnalysis={onRefreshAnalysis}
             isAnalyzing={isAnalyzing}
             onDocumentsAdded={onDocumentsAdded}
+            onDeleteDocument={onDeleteDocument}
           />
         )}
         {activeSubTab === 'advisor' && <ArchitectureAdvisor />}
