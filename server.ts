@@ -3,13 +3,27 @@ import { GoogleGenAI, Type } from '@google/genai';
 import dotenv from 'dotenv';
 import path from 'path';
 import { fileURLToPath } from 'url';
-import * as XLSX from 'xlsx';
-import { PDFParse } from 'pdf-parse';
 import { INITIAL_NOVA_ANALYSIS, SAMPLE_DOCUMENTS_NOVA, SAMPLE_DOCUMENTS_ORION } from './src/data/sampleProjects.js';
 import { ProjectAnalysis, ProjectDocument } from './src/types/project.js';
 import { synthesizeDatasetLocally } from './src/utils/datasetSynthesizer.js';
 import { normalizeAnalysis } from './src/utils/normalizeAnalysis.js';
 import { processFileIntoDocument, parseEmlContent } from './src/utils/folderParser.js';
+
+// Safe dynamic imports for optional/new dependencies to prevent startup crashes before npm install
+let XLSX: any = null;
+try {
+  XLSX = await import('xlsx');
+} catch {
+  console.warn('[Project 360] Note: "xlsx" module not found. Run "npm install" to enable Excel parsing.');
+}
+
+let PDFParse: any = null;
+try {
+  const pdfModule = await import('pdf-parse');
+  PDFParse = pdfModule.PDFParse || (pdfModule as any).default || pdfModule;
+} catch {
+  console.warn('[Project 360] Note: "pdf-parse" module not found. Run "npm install" to enable local PDF text parsing.');
+}
 
 dotenv.config();
 
@@ -990,6 +1004,13 @@ app.post('/api/compare-projects', async (req: Request, res: Response) => {
 
 function scanExcelBuffer(buffer: Buffer, fileName: string, index = 1): ProjectDocument {
   try {
+    if (!XLSX) {
+      return processFileIntoDocument(
+        { name: fileName },
+        `# TABLEUR EXCEL : ${fileName}\n\n*Note : Exécutez 'npm install' dans votre terminal local pour activer le module de traitement natif des classeurs Excel (xlsx).*`,
+        index
+      );
+    }
     const workbook = XLSX.read(buffer, { type: 'buffer' });
     const sheetNames = workbook.SheetNames || [];
     const sections: string[] = [];
