@@ -52,7 +52,40 @@ const ai = new GoogleGenAI({
 });
 
 // Standard fast & accurate multimodal model for structured JSON synthesis, OCR and RAG
-const GEMINI_MODEL = 'gemini-3.8-flash';
+// Configurable via GEMINI_MODEL environment variable (e.g., 'gemini-2.5-flash', 'gemini-2.5-flash-lite', 'gemini-1.5-flash')
+export function resolveGeminiModel(rawModelName?: string): string {
+  const envVal = rawModelName || process.env.GEMINI_MODEL || process.env.VITE_GEMINI_MODEL || '';
+  let m = envVal.trim().toLowerCase().replace(/^['"]+|['"]+$/g, '');
+  
+  if (!m) {
+    return 'gemini-2.5-flash';
+  }
+  
+  // Normalize various formats users might provide in .env
+  if (m === '2.5-flash-lite' || m === 'flash-lite' || m === 'gemini-2.5-flash-lite' || m === 'gemini-flash-lite' || m === '2.0-flash-lite' || m === 'gemini-2.0-flash-lite') {
+    return 'gemini-2.5-flash-lite';
+  }
+  if (m === '2.5-flash' || m === 'flash' || m === 'gemini-2.5-flash' || m === 'gemini-flash' || m === '2.0-flash' || m === 'gemini-2.0-flash' || m === '3.8-flash' || m === 'gemini-3.8-flash') {
+    return 'gemini-2.5-flash';
+  }
+  if (m === '1.5-flash' || m === 'gemini-1.5-flash') {
+    return 'gemini-1.5-flash';
+  }
+  if (m === '1.5-flash-8b' || m === 'gemini-1.5-flash-8b') {
+    return 'gemini-1.5-flash-8b';
+  }
+  if (m === '1.5-pro' || m === 'gemini-1.5-pro' || m === '2.5-pro' || m === 'gemini-2.5-pro' || m === 'pro') {
+    return 'gemini-2.5-pro';
+  }
+  if (!m.startsWith('gemini-') && !m.startsWith('models/')) {
+    return `gemini-${m}`;
+  }
+  return m;
+}
+
+export function getGeminiModel(): string {
+  return resolveGeminiModel(process.env.GEMINI_MODEL);
+}
 
 // Local LLM Configuration (Ollama, LM Studio, etc.)
 const OLLAMA_HOST = process.env.OLLAMA_HOST || 'http://localhost:11434';
@@ -475,7 +508,7 @@ Toutes tes extractions, citations, décisions, contradictions, risques et jalons
 
     try {
       const response = await ai.models.generateContent({
-        model: GEMINI_MODEL,
+        model: getGeminiModel(),
         contents: prompt,
         config: {
           responseMimeType: 'application/json',
@@ -552,7 +585,7 @@ ${docsText}`;
 
     try {
       const response = await ai.models.generateContent({
-        model: GEMINI_MODEL,
+        model: getGeminiModel(),
         contents: prompt,
         config: {
           responseMimeType: 'application/json',
@@ -701,7 +734,7 @@ Réponds au format JSON avec le schéma suivant :
 
     try {
       const response = await ai.models.generateContent({
-        model: GEMINI_MODEL,
+        model: getGeminiModel(),
         contents: userPrompt,
         config: {
           systemInstruction: systemPrompt,
@@ -827,7 +860,7 @@ Fournis également l'impact sur le statut global du projet ('on_track', 'at_risk
 
     try {
       const response = await ai.models.generateContent({
-        model: GEMINI_MODEL,
+        model: getGeminiModel(),
         contents: prompt,
         config: {
           responseMimeType: 'application/json',
@@ -946,7 +979,7 @@ Produis un compte-rendu synthétique, orienté décision et gouvernance.`;
 
     try {
       const response = await ai.models.generateContent({
-        model: GEMINI_MODEL,
+        model: getGeminiModel(),
         contents: prompt,
         config: {
           systemInstruction: "Tu es un directeur de programme et conseiller exécutif chevronné.",
@@ -1175,7 +1208,7 @@ async function scanPdfBuffer(buffer: Buffer, fileName: string, cleanBase64?: str
   if (apiKey && cleanBase64) {
     try {
       const response = await ai.models.generateContent({
-        model: GEMINI_MODEL,
+        model: getGeminiModel(),
         contents: [
           {
             inlineData: {
@@ -1286,7 +1319,7 @@ async function scanImageBuffer(buffer: Buffer, fileName: string, mimeType: strin
   if (apiKey && cleanBase64) {
     try {
       const response = await ai.models.generateContent({
-        model: GEMINI_MODEL,
+        model: getGeminiModel(),
         contents: [
           {
             inlineData: {
@@ -1514,7 +1547,7 @@ async function startServer() {
   app.listen(PORT, '0.0.0.0', () => {
     console.log(`[Project 360 Server] Running on http://localhost:${PORT}`);
     if (apiKey) {
-      console.log(`[Project 360 AI] Google Gemini Active (${GEMINI_MODEL}) - Multimodal Vision OCR & RAG enabled`);
+      console.log(`[Project 360 AI] Google Gemini Active (Model: ${getGeminiModel()}) - Multimodal Vision OCR & RAG enabled`);
     } else if (process.env.USE_LOCAL_LLM === 'true') {
       console.log(`[Project 360 AI] Local LLM Active (${OLLAMA_HOST} - ${OLLAMA_MODEL})`);
     } else {

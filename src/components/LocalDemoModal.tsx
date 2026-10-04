@@ -40,9 +40,9 @@ export const LocalDemoModal: React.FC<LocalDemoModalProps> = ({ isOpen, onClose 
   const steps = isEn ? [
     {
       id: 'step1',
-      title: '1. Clone the repository to your computer',
-      desc: 'Open your terminal (macOS/Linux) or PowerShell (Windows) and enter your local workspace directory:',
-      command: `git clone https://github.com/tristanriehl/Project-360.git\ncd Project-360`
+      title: '1. Open the project folder in terminal',
+      desc: 'Open your terminal (macOS/Linux) or PowerShell (Windows) in your project directory:',
+      command: `cd project-360`
     },
     {
       id: 'step2',
@@ -52,9 +52,9 @@ export const LocalDemoModal: React.FC<LocalDemoModalProps> = ({ isOpen, onClose 
     },
     {
       id: 'step3',
-      title: '3. Configure your local LLM (Ollama / LLaMA / Mistral)',
-      desc: 'To run 100% offline with zero cloud quota limits, start Ollama and configure your .env file:',
-      command: `# In terminal:\nollama run llama3.2\n\n# In your .env file:\nUSE_LOCAL_LLM="true"\nOLLAMA_HOST="http://localhost:11434"\nOLLAMA_MODEL="llama3.2"\n# Leave GEMINI_API_KEY="" empty`
+      title: '3. Configure your LLM (.env)',
+      desc: 'Set your preferred Gemini model (e.g. gemini-2.5-flash, gemini-2.5-flash-lite) or switch to Ollama for 100% offline inference:',
+      command: `# Option A: Gemini Model with your API Key\nGEMINI_API_KEY="your-gemini-api-key"\nGEMINI_MODEL="gemini-2.5-flash"\n\n# Option B: Local LLM with Ollama (Zero Quota Limit)\nUSE_LOCAL_LLM="true"\nOLLAMA_HOST="http://localhost:11434"\nOLLAMA_MODEL="llama3.2"`
     },
     {
       id: 'step4',
@@ -65,9 +65,9 @@ export const LocalDemoModal: React.FC<LocalDemoModalProps> = ({ isOpen, onClose 
   ] : [
     {
       id: 'step1',
-      title: '1. Cloner le projet sur votre ordinateur',
-      desc: 'Ouvrez votre terminal (macOS/Linux) ou PowerShell (Windows) dans votre dossier de travail :',
-      command: `git clone https://github.com/tristanriehl/Project-360.git\ncd Project-360`
+      title: '1. Ouvrir le projet dans votre terminal',
+      desc: 'Ouvrez votre terminal (macOS/Linux) ou PowerShell (Windows) dans le dossier du projet :',
+      command: `cd project-360`
     },
     {
       id: 'step2',
@@ -77,9 +77,9 @@ export const LocalDemoModal: React.FC<LocalDemoModalProps> = ({ isOpen, onClose 
     },
     {
       id: 'step3',
-      title: '3. Configurer votre LLM local (Ollama / LLaMA / Mistral)',
-      desc: 'Pour exécuter le projet 100% hors-ligne sans limite de quota, lancez Ollama et configurez votre .env :',
-      command: `# Dans votre terminal :\nollama run llama3.2\n\n# Dans votre fichier .env :\nUSE_LOCAL_LLM="true"\nOLLAMA_HOST="http://localhost:11434"\nOLLAMA_MODEL="llama3.2"\n# Laissez GEMINI_API_KEY="" vide`
+      title: '3. Configurer votre LLM (.env)',
+      desc: 'Définissez votre modèle Gemini (ex. gemini-2.5-flash, gemini-2.5-flash-lite) ou basculez sur Ollama pour une exécution 100% locale :',
+      command: `# Option A : Modèle Gemini avec votre clé API\nGEMINI_API_KEY="votre_cle_gemini"\nGEMINI_MODEL="gemini-2.5-flash"\n\n# Option B : LLM Local Ollama (Sans limite de quota)\nUSE_LOCAL_LLM="true"\nOLLAMA_HOST="http://localhost:11434"\nOLLAMA_MODEL="llama3.2"`
     },
     {
       id: 'step4',
